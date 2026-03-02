@@ -26,6 +26,58 @@
       "position": [-800, -200]
     },
     {
+      "id": "a1000001-0001-0001-0001-000000000031",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [-800, 0],
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "CONFIGURE_ME",
+          "name": "Telegram account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000033",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-800, 200],
+      "parameters": {
+        "path": "job-search",
+        "httpMethod": "GET",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "job-search-webhook"
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000034",
+      "name": "Parse Webhook Hours",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-500, 200],
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst hours = parseInt($input.first().json.query?.hours) || 12;\nconst seconds = hours * 3600;\n\nstaticData.customTimeWindow = seconds;\n\nconsole.log(`Webhook trigger: searching last ${hours} hours (${seconds}s)`);\n\nreturn [{json: {hours: hours, seconds: seconds, triggered: 'webhook'}}];"
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000032",
+      "name": "Parse Hours",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-500, 0],
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst msg = ($input.first().json.message?.text || '').trim();\n\n// Parse commands like: /jobs 6, /jobs 12, /jobs\nconst match = msg.match(/^\\/jobs(?:\\s+(\\d+))?$/);\n\nif (!match) {\n  // Not a valid command — ignore\n  staticData.telegramTriggered = false;\n  return [{json: {skip: true, reason: 'Invalid command. Use /jobs or /jobs <hours>'}}];\n}\n\nconst hours = match[1] ? parseInt(match[1]) : 12; // Default 12 hours if no number given\nconst seconds = hours * 3600;\n\nstaticData.telegramTriggered = true;\nstaticData.customTimeWindow = seconds;\nstaticData.triggerChatId = $input.first().json.message?.chat?.id || 'CONFIGURE_ME';\n\nconsole.log(`Telegram trigger: searching last ${hours} hours (${seconds}s)`);\n\nreturn [{json: {hours: hours, seconds: seconds, triggered: true}}];"
+      }
+    },
+    {
       "id": "a1000001-0001-0001-0001-000000000003",
       "name": "Read Config",
       "type": "n8n-nodes-base.googleSheets",
@@ -99,7 +151,7 @@
       "typeVersion": 2,
       "position": [500, -400],
       "parameters": {
-        "jsCode": "// ============================================================\n// SETTINGS — Change these before manual runs if needed\n// ============================================================\nconst TIME_WINDOW_SECONDS = 86400;  // 24 hours. Change to 7200 for 2-hour window, etc.\nconst LOCATION = 'India';           // Search location\n// ============================================================\n\nconst staticData = $getWorkflowStaticData('global');\nconst config = staticData.config || [];\nconst results = $input.all().map(i => i.json);\n\n// Build dedup set from existing results\nconst existingJobIds = {};\nfor (const r of results) {\n  if (r.JobID) existingJobIds[String(r.JobID)] = true;\n}\nstaticData.existingJobIds = existingJobIds;\nstaticData.newJobLinks = [];\n\nconsole.log(`Dedup set loaded: ${Object.keys(existingJobIds).length} existing job IDs`);\n\n// Define keyword templates per bucket\nconst bucketKeywords = {\n  '1': '\"software development engineer\" OR \"SDE\" OR \"SDE II\" OR \"SDE 2\" OR \"SDE-II\" OR \"software engineer II\" OR \"software engineer 2\" OR \"software engineer - II\"',\n  '2': '\"software engineer III\" OR \"software engineer 3\" OR \"software developer 3\"',\n  '3': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"',\n  '4': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"'\n};\n\n// Group active companies by bucket\nconst buckets = {};\nfor (const item of config) {\n  const isActive = String(item.Active).toUpperCase() === 'TRUE' || item.Active === true;\n  if (!isActive) continue;\n  \n  const bucket = String(item.Bucket);\n  if (!buckets[bucket]) buckets[bucket] = [];\n  buckets[bucket].push(String(item.CompanyID));\n}\n\n// Build LinkedIn search URLs\nconst urls = [];\nfor (const [bucket, companyIds] of Object.entries(buckets)) {\n  const keywords = bucketKeywords[bucket];\n  if (!keywords || companyIds.length === 0) continue;\n  \n  const encodedKeywords = encodeURIComponent(keywords);\n  const companyFilter = companyIds.join(',');\n  const encodedLocation = encodeURIComponent(LOCATION);\n  \n  const url = `https://www.linkedin.com/jobs/search/?keywords=${encodedKeywords}&f_C=${companyFilter}&f_TPR=r${TIME_WINDOW_SECONDS}&location=${encodedLocation}&sortBy=DD`;\n  \n  urls.push({\n    url: url,\n    bucket: bucket,\n    companyCount: companyIds.length\n  });\n}\n\nconsole.log(`Built ${urls.length} search URLs for ${Object.keys(buckets).length} active buckets`);\n\nif (urls.length === 0) {\n  return [{json: {url: '', bucket: '0', companyCount: 0, noUrls: true}}];\n}\n\nreturn urls.map(u => ({json: u}));"
+        "jsCode": "// ============================================================\n// SETTINGS — Change these before manual runs if needed\n// ============================================================\nconst staticDataForTime = $getWorkflowStaticData('global');\nconst TIME_WINDOW_SECONDS = staticDataForTime.customTimeWindow || 86400;  // Default 24h, overridden by Telegram /jobs command\n// Clear custom time after reading so scheduled runs use default\ndelete staticDataForTime.customTimeWindow;\nconst LOCATION = 'India';           // Search location\nconst GEO_ID = '102713980';         // India geoId\nconst LOCATION_FILTER = '105214831'; // Bengaluru, Karnataka f_PP filter\n// ============================================================\n\nconst staticData = $getWorkflowStaticData('global');\nconst config = staticData.config || [];\nconst results = $input.all().map(i => i.json);\n\n// Build dedup set from existing results\nconst existingJobIds = {};\nfor (const r of results) {\n  if (r.JobID) existingJobIds[String(r.JobID)] = true;\n}\nstaticData.existingJobIds = existingJobIds;\nstaticData.newJobLinks = [];\n\nconsole.log(`Dedup set loaded: ${Object.keys(existingJobIds).length} existing job IDs`);\n\n// Define keyword templates per bucket\nconst bucketKeywords = {\n  '1': '\"software development engineer\" OR \"SDE\" OR \"SDE II\" OR \"SDE 2\" OR \"SDE-II\" OR \"software engineer II\" OR \"software engineer 2\" OR \"software engineer - II\"',\n  '2': '\"software engineer III\" OR \"software engineer 3\" OR \"software developer 3\"',\n  '3': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"',\n  '4': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"'\n};\n\n// Group active companies by bucket\nconst buckets = {};\nfor (const item of config) {\n  const isActive = String(item.Active).toUpperCase() === 'TRUE' || item.Active === true;\n  if (!isActive) continue;\n  \n  const bucket = String(item.Bucket);\n  if (!buckets[bucket]) buckets[bucket] = [];\n  buckets[bucket].push(String(item.CompanyID));\n}\n\n// Build LinkedIn search URLs\nconst urls = [];\nfor (const [bucket, companyIds] of Object.entries(buckets)) {\n  const keywords = bucketKeywords[bucket];\n  if (!keywords || companyIds.length === 0) continue;\n  \n  const encodedKeywords = encodeURIComponent(keywords);\n  const companyFilter = companyIds.join(',');\n  const encodedLocation = encodeURIComponent(LOCATION);\n  \n  const url = `https://www.linkedin.com/jobs/search/?keywords=${encodedKeywords}&f_C=${companyFilter}&f_TPR=r${TIME_WINDOW_SECONDS}&location=${encodedLocation}&geoId=${GEO_ID}&f_PP=${LOCATION_FILTER}&sortBy=DD`;\n  \n  urls.push({\n    url: url,\n    bucket: bucket,\n    companyCount: companyIds.length\n  });\n}\n\nconsole.log(`Built ${urls.length} search URLs for ${Object.keys(buckets).length} active buckets`);\n\nif (urls.length === 0) {\n  return [{json: {url: '', bucket: '0', companyCount: 0, noUrls: true}}];\n}\n\nreturn urls.map(u => ({json: u}));"
       }
     },
     {
@@ -613,7 +665,7 @@
         "width": 300,
         "height": 440,
         "color": 4,
-        "content": "## Triggers\n\n**Schedule:** Runs at 7 AM and 7 PM IST daily.\n\n**Manual:** Click 'Execute Workflow' for ad-hoc runs.\n\n**Tip:** For custom time windows, open 'Build Search URLs' node and change `TIME_WINDOW_SECONDS` before manual trigger.\n- 12 hours = 43200\n- 6 hours = 21600\n- 2 hours = 7200"
+        "content": "## Triggers\n\n**Schedule:** Runs at 7 AM and 7 PM IST daily (default 24h window).\n\n**Manual:** Click 'Execute Workflow' for ad-hoc runs.\n\n**Telegram:** Message your bot with:\n- `/jobs` — search last 12 hours (default)\n- `/jobs 6` — search last 6 hours\n- `/jobs 24` — search last 24 hours\n\n**Tip:** Scheduled runs always use 24h window. Only Telegram commands support custom time windows."
       }
     },
     {
@@ -676,6 +728,26 @@
       ]
     },
     "Manual Trigger": {
+      "main": [
+        [{"node": "Read Config", "type": "main", "index": 0}]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [{"node": "Parse Hours", "type": "main", "index": 0}]
+      ]
+    },
+    "Parse Hours": {
+      "main": [
+        [{"node": "Read Config", "type": "main", "index": 0}]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [{"node": "Parse Webhook Hours", "type": "main", "index": 0}]
+      ]
+    },
+    "Parse Webhook Hours": {
       "main": [
         [{"node": "Read Config", "type": "main", "index": 0}]
       ]
