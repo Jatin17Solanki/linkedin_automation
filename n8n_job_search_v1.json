@@ -43,7 +43,7 @@
           "__rl": true,
           "mode": "list",
           "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
-          "cachedResultName": "Job Search Automation"
+          "cachedResultName": "n8n Test Claude"
         }
       },
       "credentials": {
@@ -73,15 +73,15 @@
         "options": {},
         "sheetName": {
           "__rl": true,
-          "mode": "list",
-          "value": "gid=0",
+          "mode": "name",
+          "value": "Results",
           "cachedResultName": "Results"
         },
         "documentId": {
           "__rl": true,
           "mode": "list",
           "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
-          "cachedResultName": "Job Search Automation"
+          "cachedResultName": "n8n Test Claude"
         }
       },
       "credentials": {
@@ -99,7 +99,7 @@
       "typeVersion": 2,
       "position": [500, -400],
       "parameters": {
-        "jsCode": "// ============================================================\n// SETTINGS — Change these before manual runs if needed\n// ============================================================\nconst TIME_WINDOW_SECONDS = 43200;  // 12 hours. Change to 7200 for 2-hour window, etc.\nconst LOCATION = 'India';           // Search location\n// ============================================================\n\nconst staticData = $getWorkflowStaticData('global');\nconst config = staticData.config || [];\nconst results = $input.all().map(i => i.json);\n\n// Build dedup set from existing results\nconst existingJobIds = {};\nfor (const r of results) {\n  if (r.JobID) existingJobIds[String(r.JobID)] = true;\n}\nstaticData.existingJobIds = existingJobIds;\nstaticData.newJobLinks = [];\n\nconsole.log(`Dedup set loaded: ${Object.keys(existingJobIds).length} existing job IDs`);\n\n// Define keyword templates per bucket\nconst bucketKeywords = {\n  '1': '\"software development engineer\" OR \"SDE\" OR \"SDE II\" OR \"SDE 2\" OR \"SDE-II\" OR \"software engineer II\" OR \"software engineer 2\" OR \"software engineer - II\"',\n  '2': '\"software engineer III\" OR \"software engineer 3\" OR \"software developer 3\"',\n  '3': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"',\n  '4': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"'\n};\n\n// Group active companies by bucket\nconst buckets = {};\nfor (const item of config) {\n  const isActive = String(item.Active).toUpperCase() === 'TRUE' || item.Active === true;\n  if (!isActive) continue;\n  \n  const bucket = String(item.Bucket);\n  if (!buckets[bucket]) buckets[bucket] = [];\n  buckets[bucket].push(String(item.CompanyID));\n}\n\n// Build LinkedIn search URLs\nconst urls = [];\nfor (const [bucket, companyIds] of Object.entries(buckets)) {\n  const keywords = bucketKeywords[bucket];\n  if (!keywords || companyIds.length === 0) continue;\n  \n  const encodedKeywords = encodeURIComponent(keywords);\n  const companyFilter = companyIds.join(',');\n  const encodedLocation = encodeURIComponent(LOCATION);\n  \n  const url = `https://www.linkedin.com/jobs/search/?keywords=${encodedKeywords}&f_C=${companyFilter}&f_TPR=r${TIME_WINDOW_SECONDS}&location=${encodedLocation}&sortBy=DD`;\n  \n  urls.push({\n    url: url,\n    bucket: bucket,\n    companyCount: companyIds.length\n  });\n}\n\nconsole.log(`Built ${urls.length} search URLs for ${Object.keys(buckets).length} active buckets`);\n\nif (urls.length === 0) {\n  return [{json: {url: '', bucket: '0', companyCount: 0, noUrls: true}}];\n}\n\nreturn urls.map(u => ({json: u}));"
+        "jsCode": "// ============================================================\n// SETTINGS — Change these before manual runs if needed\n// ============================================================\nconst TIME_WINDOW_SECONDS = 86400;  // 24 hours. Change to 7200 for 2-hour window, etc.\nconst LOCATION = 'India';           // Search location\n// ============================================================\n\nconst staticData = $getWorkflowStaticData('global');\nconst config = staticData.config || [];\nconst results = $input.all().map(i => i.json);\n\n// Build dedup set from existing results\nconst existingJobIds = {};\nfor (const r of results) {\n  if (r.JobID) existingJobIds[String(r.JobID)] = true;\n}\nstaticData.existingJobIds = existingJobIds;\nstaticData.newJobLinks = [];\n\nconsole.log(`Dedup set loaded: ${Object.keys(existingJobIds).length} existing job IDs`);\n\n// Define keyword templates per bucket\nconst bucketKeywords = {\n  '1': '\"software development engineer\" OR \"SDE\" OR \"SDE II\" OR \"SDE 2\" OR \"SDE-II\" OR \"software engineer II\" OR \"software engineer 2\" OR \"software engineer - II\"',\n  '2': '\"software engineer III\" OR \"software engineer 3\" OR \"software developer 3\"',\n  '3': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"',\n  '4': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"'\n};\n\n// Group active companies by bucket\nconst buckets = {};\nfor (const item of config) {\n  const isActive = String(item.Active).toUpperCase() === 'TRUE' || item.Active === true;\n  if (!isActive) continue;\n  \n  const bucket = String(item.Bucket);\n  if (!buckets[bucket]) buckets[bucket] = [];\n  buckets[bucket].push(String(item.CompanyID));\n}\n\n// Build LinkedIn search URLs\nconst urls = [];\nfor (const [bucket, companyIds] of Object.entries(buckets)) {\n  const keywords = bucketKeywords[bucket];\n  if (!keywords || companyIds.length === 0) continue;\n  \n  const encodedKeywords = encodeURIComponent(keywords);\n  const companyFilter = companyIds.join(',');\n  const encodedLocation = encodeURIComponent(LOCATION);\n  \n  const url = `https://www.linkedin.com/jobs/search/?keywords=${encodedKeywords}&f_C=${companyFilter}&f_TPR=r${TIME_WINDOW_SECONDS}&location=${encodedLocation}&sortBy=DD`;\n  \n  urls.push({\n    url: url,\n    bucket: bucket,\n    companyCount: companyIds.length\n  });\n}\n\nconsole.log(`Built ${urls.length} search URLs for ${Object.keys(buckets).length} active buckets`);\n\nif (urls.length === 0) {\n  return [{json: {url: '', bucket: '0', companyCount: 0, noUrls: true}}];\n}\n\nreturn urls.map(u => ({json: u}));"
       }
     },
     {
@@ -237,7 +237,7 @@
               "id": "cond-dummy-check",
               "operator": {
                 "type": "boolean",
-                "operation": "notTrue"
+                "operation": "true"
               },
               "leftValue": "={{ $json.dummy }}",
               "rightValue": ""
@@ -306,7 +306,7 @@
       "typeVersion": 2,
       "position": [2500, -200],
       "parameters": {
-        "jsCode": "// ============================================================\n// SETTINGS\n// ============================================================\nconst MAX_EXPERIENCE_YEARS = 5;  // Skip roles requiring more than this\n// ============================================================\n\nconst parsed = $input.first().json;\n\n// Get original search data from the loop item\nlet searchData = {};\ntry {\n  searchData = $('Loop Over Jobs').first().json || {};\n} catch(e) {\n  searchData = {};\n}\n\nconst jobId = searchData.jobId || '';\nconst bucket = searchData.bucket || '';\nconst searchTitle = searchData.searchTitle || '';\nconst searchCompany = searchData.searchCompany || '';\n\n// If parsing failed or dummy, mark as invalid\nif (!parsed.title && !searchTitle) {\n  return [{json: {valid: false, reason: 'parse_failed'}}];\n}\n\nconst title = (parsed.title || searchTitle || '').trim();\nconst company = (parsed.company || searchCompany || '').trim();\nconst location = (parsed.location || searchData.searchLocation || '').trim();\nconst description = (parsed.description || '').replace(/\\s+/g, ' ').trim();\nconst criteria = parsed.criteria || [];\n\n// ============================================================\n// EXPERIENCE EXTRACTION (regex-based, no LLM needed)\n// ============================================================\nlet expText = 'Not specified';\nlet minExp = null;\nlet maxExp = null;\n\n// Try extracting from description\nconst descLower = description.toLowerCase();\n\n// Patterns: \"3+ years\", \"3-5 years\", \"3 to 5 years\", \"minimum 3 years\", \"at least 3 years\"\nconst expPatterns = [\n  /(\\d+)\\s*\\+\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*[-–to]+\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(?:minimum|at least|min\\.?)\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*(?:years|yrs)\\s*(?:of)?\\s*(?:experience|exp)/i\n];\n\nfor (const pattern of expPatterns) {\n  const match = descLower.match(pattern);\n  if (match) {\n    minExp = parseInt(match[1]);\n    maxExp = match[2] ? parseInt(match[2]) : null;\n    expText = match[0].trim();\n    break;\n  }\n}\n\n// Also check criteria list (LinkedIn structured data)\nfor (const c of criteria) {\n  const cLower = (c || '').toLowerCase().trim();\n  // Sometimes criteria has \"Mid-Senior level\" or \"Entry level\"\n  if (cLower.includes('entry')) {\n    if (!minExp) { minExp = 0; expText = cLower; }\n  } else if (cLower.includes('mid-senior')) {\n    if (!minExp) { minExp = 3; expText = cLower; }\n  }\n}\n\n// ============================================================\n// FILTER: Skip if experience requirement > threshold\n// ============================================================\nconst skipDueToExp = minExp !== null && minExp > MAX_EXPERIENCE_YEARS;\n\nif (skipDueToExp) {\n  console.log(`Skipping ${title} at ${company}: requires ${expText} (min ${minExp} yrs > ${MAX_EXPERIENCE_YEARS})`);\n  return [{json: {valid: false, reason: 'experience_too_high', title, company, expText}}];\n}\n\n// ============================================================\n// DETERMINE PRIMARY TAG\n// ============================================================\nlet primaryTag = 'Generic';\nconst titleLower = title.toLowerCase();\nif (/sde.?(?:ii|2)/i.test(titleLower)) primaryTag = 'SDE-II';\nelse if (/software.*engineer.*(?:iii|3)/i.test(titleLower)) primaryTag = 'SE-III';\nelse if (/mts|member.*technical/i.test(titleLower)) primaryTag = 'MTS';\nelse if (/senior|sr/i.test(titleLower)) primaryTag = 'Senior';\nelse if (/backend|back.?end/i.test(titleLower)) primaryTag = 'Backend';\nelse primaryTag = 'Generic';\n\n// ============================================================\n// BUILD RESULT ROW\n// ============================================================\nconst now = new Date().toISOString();\n\nreturn [{json: {\n  valid: true,\n  JobID: jobId,\n  Title: title,\n  Company: company,\n  Location: location,\n  Link: `https://www.linkedin.com/jobs/view/${jobId}`,\n  ExperienceReq: expText,\n  DatePosted: '',\n  FirstSeen: now,\n  Bucket: bucket,\n  PrimaryTag: primaryTag,\n  Notified: 'FALSE',\n  Score: '',\n  Status: 'New'\n}}];"
+        "jsCode": "// ============================================================\n// SETTINGS\n// ============================================================\nconst MAX_EXPERIENCE_YEARS = 4;  // Skip roles where minimum experience > 4 years\n// ============================================================\n\nconst parsed = $input.first().json;\n\n// Get original search data from the loop item\nlet searchData = {};\ntry {\n  searchData = $('Loop Over Jobs').first().json || {};\n} catch(e) {\n  searchData = {};\n}\n\nconst jobId = searchData.jobId || '';\nconst bucket = searchData.bucket || '';\nconst searchTitle = searchData.searchTitle || '';\nconst searchCompany = searchData.searchCompany || '';\n\n// If parsing failed or dummy, mark as invalid\nif (!parsed.title && !searchTitle) {\n  return [{json: {valid: false, reason: 'parse_failed'}}];\n}\n\nconst title = (parsed.title || searchTitle || '').trim();\nconst company = (parsed.company || searchCompany || '').trim();\nconst location = (parsed.location || searchData.searchLocation || '').trim();\nconst description = (parsed.description || '').replace(/\\s+/g, ' ').trim();\nconst criteria = parsed.criteria || [];\n\n// ============================================================\n// EXPERIENCE EXTRACTION (regex-based, no LLM needed)\n// ============================================================\nlet expText = 'Not specified';\nlet minExp = null;\nlet maxExp = null;\n\n// Try extracting from description\nconst descLower = description.toLowerCase();\n\n// Patterns: \"3+ years\", \"3-5 years\", \"3 to 5 years\", \"minimum 3 years\", \"at least 3 years\"\nconst expPatterns = [\n  /(\\d+)\\s*\\+\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*[-–to]+\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(?:minimum|at least|min\\.?)\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*(?:years|yrs)\\s*(?:of)?\\s*(?:experience|exp)/i\n];\n\nfor (const pattern of expPatterns) {\n  const match = descLower.match(pattern);\n  if (match) {\n    minExp = parseInt(match[1]);\n    maxExp = match[2] ? parseInt(match[2]) : null;\n    expText = match[0].trim();\n    break;\n  }\n}\n\n// Also check criteria list (LinkedIn structured data)\nfor (const c of criteria) {\n  const cLower = (c || '').toLowerCase().trim();\n  // Sometimes criteria has \"Mid-Senior level\" or \"Entry level\"\n  if (cLower.includes('entry')) {\n    if (!minExp) { minExp = 0; expText = cLower; }\n  } else if (cLower.includes('mid-senior')) {\n    if (!minExp) { minExp = 3; expText = cLower; }\n  }\n}\n\n// ============================================================\n// FILTER: Skip if experience requirement > threshold\n// ============================================================\nconst skipDueToExp = minExp !== null && minExp > MAX_EXPERIENCE_YEARS;\n\nif (skipDueToExp) {\n  console.log(`Skipping ${title} at ${company}: requires ${expText} (min ${minExp} yrs > ${MAX_EXPERIENCE_YEARS})`);\n  return [{json: {valid: false, reason: 'experience_too_high', title, company, expText}}];\n}\n\n// ============================================================\n// DETERMINE PRIMARY TAG\n// ============================================================\nlet primaryTag = 'Generic';\nconst titleLower = title.toLowerCase();\nif (/sde.?(?:ii|2)/i.test(titleLower)) primaryTag = 'SDE-II';\nelse if (/software.*engineer.*(?:iii|3)/i.test(titleLower)) primaryTag = 'SE-III';\nelse if (/mts|member.*technical/i.test(titleLower)) primaryTag = 'MTS';\nelse if (/senior|sr/i.test(titleLower)) primaryTag = 'Senior';\nelse if (/backend|back.?end/i.test(titleLower)) primaryTag = 'Backend';\nelse primaryTag = 'Generic';\n\n// ============================================================\n// BUILD RESULT ROW\n// ============================================================\nconst now = new Date().toISOString();\n\nreturn [{json: {\n  valid: true,\n  JobID: jobId,\n  Title: title,\n  Company: company,\n  Location: location,\n  Link: `https://www.linkedin.com/jobs/view/${jobId}`,\n  ExperienceReq: expText,\n  PrimaryTag: primaryTag,\n  FirstSeen: now,\n  Notified: 'FALSE',\n  Score: '',\n  Status: 'New'\n}}];"
       }
     },
     {
@@ -354,25 +354,21 @@
             "Location": "={{ $json.Location }}",
             "Link": "={{ $json.Link }}",
             "ExperienceReq": "={{ $json.ExperienceReq }}",
-            "DatePosted": "={{ $json.DatePosted }}",
-            "FirstSeen": "={{ $json.FirstSeen }}",
-            "Bucket": "={{ $json.Bucket }}",
             "PrimaryTag": "={{ $json.PrimaryTag }}",
+            "FirstSeen": "={{ $json.FirstSeen }}",
             "Notified": "={{ $json.Notified }}",
             "Score": "={{ $json.Score }}",
             "Status": "={{ $json.Status }}"
           },
           "schema": [
-            {"id": "JobID", "type": "string", "display": true, "required": false, "displayName": "JobID", "defaultMatch": true, "canBeUsedToMatch": true},
+            {"id": "JobID", "type": "string", "display": true, "required": false, "displayName": "JobID", "defaultMatch": false, "canBeUsedToMatch": true},
             {"id": "Title", "type": "string", "display": true, "required": false, "displayName": "Title", "defaultMatch": false, "canBeUsedToMatch": true},
             {"id": "Company", "type": "string", "display": true, "required": false, "displayName": "Company", "defaultMatch": false, "canBeUsedToMatch": true},
             {"id": "Location", "type": "string", "display": true, "required": false, "displayName": "Location", "defaultMatch": false, "canBeUsedToMatch": true},
             {"id": "Link", "type": "string", "display": true, "required": false, "displayName": "Link", "defaultMatch": false, "canBeUsedToMatch": true},
             {"id": "ExperienceReq", "type": "string", "display": true, "required": false, "displayName": "ExperienceReq", "defaultMatch": false, "canBeUsedToMatch": true},
-            {"id": "DatePosted", "type": "string", "display": true, "required": false, "displayName": "DatePosted", "defaultMatch": false, "canBeUsedToMatch": true},
-            {"id": "FirstSeen", "type": "string", "display": true, "required": false, "displayName": "FirstSeen", "defaultMatch": false, "canBeUsedToMatch": true},
-            {"id": "Bucket", "type": "string", "display": true, "required": false, "displayName": "Bucket", "defaultMatch": false, "canBeUsedToMatch": true},
             {"id": "PrimaryTag", "type": "string", "display": true, "required": false, "displayName": "PrimaryTag", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "FirstSeen", "type": "string", "display": true, "required": false, "displayName": "FirstSeen", "defaultMatch": false, "canBeUsedToMatch": true},
             {"id": "Notified", "type": "string", "display": true, "required": false, "displayName": "Notified", "defaultMatch": false, "canBeUsedToMatch": true},
             {"id": "Score", "type": "string", "display": true, "required": false, "displayName": "Score", "defaultMatch": false, "canBeUsedToMatch": true},
             {"id": "Status", "type": "string", "display": true, "required": false, "displayName": "Status", "defaultMatch": false, "canBeUsedToMatch": true}
@@ -386,15 +382,15 @@
         "operation": "appendOrUpdate",
         "sheetName": {
           "__rl": true,
-          "mode": "list",
-          "value": "gid=0",
+          "mode": "name",
+          "value": "Results",
           "cachedResultName": "Results"
         },
         "documentId": {
           "__rl": true,
           "mode": "list",
           "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
-          "cachedResultName": "Job Search Automation"
+          "cachedResultName": "n8n Test Claude"
         }
       },
       "credentials": {
@@ -406,6 +402,16 @@
     },
     {
       "id": "a1000001-0001-0001-0001-000000000021",
+      "name": "Trigger Read",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, -800],
+      "parameters": {
+        "jsCode": "// Collapse all loop output items into a single trigger so Read Unnotified executes only once\nreturn [{json: {trigger: true}}];"
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000030",
       "name": "Read Unnotified",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.6,
@@ -425,15 +431,15 @@
         },
         "sheetName": {
           "__rl": true,
-          "mode": "list",
-          "value": "gid=0",
+          "mode": "name",
+          "value": "Results",
           "cachedResultName": "Results"
         },
         "documentId": {
           "__rl": true,
           "mode": "list",
           "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
-          "cachedResultName": "Job Search Automation"
+          "cachedResultName": "n8n Test Claude"
         }
       },
       "credentials": {
@@ -451,7 +457,7 @@
       "typeVersion": 2,
       "position": [2200, -800],
       "parameters": {
-        "jsCode": "const items = $input.all();\n\n// Filter out items that don't look like job results\nconst jobs = items.filter(i => i.json.JobID && i.json.Title && i.json.Notified === 'FALSE');\n\nif (jobs.length === 0) {\n  return [{json: {hasJobs: false, message: 'No new jobs to notify', jobIds: []}}];\n}\n\n// Build Telegram message\nlet message = `\\u{1F514} ${jobs.length} New Opening${jobs.length > 1 ? 's' : ''} Found\\n\\n`;\n\nfor (let i = 0; i < jobs.length; i++) {\n  const j = jobs[i].json;\n  const num = i + 1;\n  const exp = j.ExperienceReq && j.ExperienceReq !== 'Not specified' ? ` (${j.ExperienceReq})` : '';\n  const tag = j.PrimaryTag ? ` [${j.PrimaryTag}]` : '';\n  \n  message += `${num}. ${j.Company} \\u2014 ${j.Title}${exp}${tag}\\n`;\n  message += `   \\u{1F4CD} ${j.Location || 'N/A'}\\n`;\n  message += `   \\u{1F517} ${j.Link}\\n\\n`;\n}\n\n// Collect job IDs for marking as notified\nconst jobIds = jobs.map(j => j.json.JobID);\n\nreturn [{json: {\n  hasJobs: true,\n  message: message.trim(),\n  jobIds: jobIds,\n  count: jobs.length\n}}];"
+        "jsCode": "const items = $input.all();\n\n// Filter out items that don't look like job results\nconst jobs = items.filter(i => i.json.JobID && i.json.Title && i.json.Notified === false);\n\nif (jobs.length === 0) {\n  return [{json: {hasJobs: false, message: 'No new jobs to notify', jobIds: []}}];\n}\n\n// Build individual job entries\nconst entries = [];\nfor (let i = 0; i < jobs.length; i++) {\n  const j = jobs[i].json;\n  const num = i + 1;\n  const exp = j.ExperienceReq && j.ExperienceReq !== 'Not specified' ? ` (${j.ExperienceReq})` : '';\n  const tag = j.PrimaryTag ? ` [${j.PrimaryTag}]` : '';\n  let entry = `${num}. ${j.Company} \\u2014 ${j.Title}${exp}${tag}\\n`;\n  entry += `   \\u{1F4CD} ${j.Location || 'N/A'}\\n`;\n  entry += `   ${j.Link}`;\n  entries.push(entry);\n}\n\n// Split into multiple messages to stay under Telegram 4096 char limit\nconst MAX_LEN = 4000;\nconst messages = [];\nconst header = `\\u{1F514} ${jobs.length} New Opening${jobs.length > 1 ? 's' : ''} Found\\n\\n`;\nlet current = header;\n\nfor (const entry of entries) {\n  if (current.length + entry.length + 2 > MAX_LEN) {\n    messages.push(current.trim());\n    current = '...contd\\n\\n';\n  }\n  current += entry + '\\n\\n';\n}\nif (current.trim()) messages.push(current.trim());\n\n// Collect job IDs for marking as notified\nconst jobIds = jobs.map(j => j.json.JobID);\n\nreturn [{json: {\n  hasJobs: true,\n  messages: messages,\n  message: messages[0],\n  jobIds: jobIds,\n  count: jobs.length\n}}];"
       }
     },
     {
@@ -485,17 +491,26 @@
       }
     },
     {
+      "id": "a1000001-0001-0001-0001-000000000028",
+      "name": "Split Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2800, -900],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst messages = data.messages || [data.message];\nconst jobIds = data.jobIds || [];\n\nreturn messages.map((msg, i) => ({\n  json: {\n    message: msg,\n    jobIds: i === messages.length - 1 ? jobIds : []\n  }\n}));"
+      }
+    },
+    {
       "id": "a1000001-0001-0001-0001-000000000024",
       "name": "Send Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [2800, -900],
+      "position": [3100, -900],
       "parameters": {
         "chatId": "CONFIGURE_ME",
         "text": "={{ $json.message }}",
         "additionalFields": {
-          "appendAttribution": false,
-          "parse_mode": "HTML"
+          "appendAttribution": false
         }
       },
       "credentials": {
@@ -510,9 +525,9 @@
       "name": "Mark Jobs Notified",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3100, -900],
+      "position": [3400, -900],
       "parameters": {
-        "jsCode": "// Output individual items for each job ID to update\nconst jobIds = $input.first().json.jobIds || [];\n\nif (jobIds.length === 0) {\n  return [{json: {nothing: true}}];\n}\n\nreturn jobIds.map(id => ({\n  json: {\n    JobID: id,\n    Notified: 'TRUE'\n  }\n}));"
+        "jsCode": "// Get jobIds from Format Telegram node (Send Telegram overwrites json with API response)\nlet allIds = [];\ntry {\n  const formatData = $('Format Telegram').first().json;\n  allIds = formatData.jobIds || [];\n} catch(e) {\n  // Fallback: try from input\n  for (const item of $input.all()) {\n    const ids = item.json.jobIds || [];\n    allIds.push(...ids);\n  }\n}\n\nif (allIds.length === 0) {\n  return [{json: {nothing: true}}];\n}\n\nreturn allIds.map(id => ({\n  json: {\n    JobID: id,\n    Notified: 'TRUE'\n  }\n}));"
       }
     },
     {
@@ -520,7 +535,7 @@
       "name": "Update Notified Status",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.6,
-      "position": [3400, -900],
+      "position": [3700, -900],
       "parameters": {
         "columns": {
           "value": {
@@ -529,7 +544,16 @@
           },
           "schema": [
             {"id": "JobID", "type": "string", "display": true, "required": false, "displayName": "JobID", "defaultMatch": true, "canBeUsedToMatch": true},
-            {"id": "Notified", "type": "string", "display": true, "required": false, "displayName": "Notified", "defaultMatch": false, "canBeUsedToMatch": false}
+            {"id": "Title", "type": "string", "display": true, "required": false, "displayName": "Title", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "Company", "type": "string", "display": true, "required": false, "displayName": "Company", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "Location", "type": "string", "display": true, "required": false, "displayName": "Location", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "Link", "type": "string", "display": true, "required": false, "displayName": "Link", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "ExperienceReq", "type": "string", "display": true, "required": false, "displayName": "ExperienceReq", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "PrimaryTag", "type": "string", "display": true, "required": false, "displayName": "PrimaryTag", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "FirstSeen", "type": "string", "display": true, "required": false, "displayName": "FirstSeen", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "Notified", "type": "string", "display": true, "required": false, "displayName": "Notified", "defaultMatch": false, "canBeUsedToMatch": false},
+            {"id": "Score", "type": "string", "display": true, "required": false, "displayName": "Score", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "Status", "type": "string", "display": true, "required": false, "displayName": "Status", "defaultMatch": false, "canBeUsedToMatch": true}
           ],
           "mappingMode": "defineBelow",
           "matchingColumns": ["JobID"],
@@ -540,15 +564,15 @@
         "operation": "appendOrUpdate",
         "sheetName": {
           "__rl": true,
-          "mode": "list",
-          "value": "gid=0",
+          "mode": "name",
+          "value": "Results",
           "cachedResultName": "Results"
         },
         "documentId": {
           "__rl": true,
           "mode": "list",
           "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
-          "cachedResultName": "Job Search Automation"
+          "cachedResultName": "n8n Test Claude"
         }
       },
       "credentials": {
@@ -709,8 +733,13 @@
     },
     "Loop Over Jobs": {
       "main": [
-        [{"node": "Read Unnotified", "type": "main", "index": 0}],
+        [{"node": "Trigger Read", "type": "main", "index": 0}],
         [{"node": "Wait Between Jobs", "type": "main", "index": 0}]
+      ]
+    },
+    "Trigger Read": {
+      "main": [
+        [{"node": "Read Unnotified", "type": "main", "index": 0}]
       ]
     },
     "Wait Between Jobs": {
@@ -720,8 +749,8 @@
     },
     "Skip If Dummy": {
       "main": [
-        [{"node": "Fetch Job Detail", "type": "main", "index": 0}],
-        [{"node": "Loop Over Jobs", "type": "main", "index": 0}]
+        [{"node": "Loop Over Jobs", "type": "main", "index": 0}],
+        [{"node": "Fetch Job Detail", "type": "main", "index": 0}]
       ]
     },
     "Fetch Job Detail": {
@@ -762,8 +791,13 @@
     },
     "Has New Jobs?": {
       "main": [
-        [{"node": "Send Telegram", "type": "main", "index": 0}],
+        [{"node": "Split Messages", "type": "main", "index": 0}],
         [{"node": "Send No Results Telegram", "type": "main", "index": 0}]
+      ]
+    },
+    "Split Messages": {
+      "main": [
+        [{"node": "Send Telegram", "type": "main", "index": 0}]
       ]
     },
     "Send Telegram": {
