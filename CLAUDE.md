@@ -3,9 +3,9 @@
 ## What This Is
 An n8n automation workflow (`n8n_job_search_v1.json`) that searches LinkedIn's public job pages for target companies in **Bengaluru**, filters results by experience level, logs to Google Sheets, and sends Telegram notifications. Built for Jatin's job search targeting mid-level backend/full-stack roles (3.5 years experience).
 
-## File Location
-The workflow JSON is at: `n8n_job_search_v1.json` (in the same directory as this file).
-It has 33 functional nodes + 5 sticky notes.
+## File Locations
+- **Main workflow:** `n8n_job_search_v1.json` — scheduled job search (33 functional nodes + 5 sticky notes)
+- **Company search:** `n8n_company_search_v1.json` — on-demand `/search` command (23 functional nodes + 3 sticky notes)
 
 ## Architecture Overview
 
@@ -247,6 +247,100 @@ Auto-deploys workflow changes when `n8n_job_search_v1.json` is pushed to `main`.
 1. In n8n UI, enable the "Telegram Trigger" node (right-click > Enable)
 2. Optionally disable the "Webhook Trigger" node (not needed on cloud)
 3. Save and activate the workflow — Telegram will auto-register its webhook with n8n's HTTPS URL
+
+## On-Demand Company Search Workflow (`/search`)
+
+A separate, stateless workflow (`n8n_company_search_v1.json`) for searching a specific company's openings on demand. Uses the same Telegram bot and Config sheet (read-only), but does not write to Results or dedup against previous runs.
+
+### Command Format
+```
+/search CompanyName [Days]
+```
+- `/search Oracle 30` — Oracle jobs from last 30 days
+- `/search Google` — Google jobs, default 7 days
+- `/search clear 14` — partial match (ClearTrip, ClearTax, etc.)
+- Days clamped to 1-90 range
+
+### Key Differences from Main Workflow
+| Feature | Main (`/jobs`) | Company Search (`/search`) |
+|---------|---------------|---------------------------|
+| Scope | All active companies | Single company (partial match) |
+| Time unit | Hours | Days (default 7) |
+| Dedup | Against Results sheet | Within-run only (no sheet dedup) |
+| Negative title filters | Same | Same (staff, QA, devops, etc.; senior for buckets 1 & 2) |
+| Experience filter | Same | Same (skips >4 yrs min) |
+| Sheet writes | Appends to Results | None (stateless) |
+| Notification tracking | Marks Notified=TRUE | None |
+
+### Architecture
+```
+Telegram Trigger (/search)
+  → Parse Search Command (company + days)
+  → Read Config (Google Sheet)
+  → Lookup Company (case-insensitive partial match)
+  → Company Found?
+    ├─ NO → Send Error Telegram
+    └─ YES → Build Search URL → Loop Over URLs
+      → Wait 3s → Fetch → Extract → Filter → loop back
+    → Output Job Links → Has Links?
+      ├─ NO → Send No Results Telegram
+      └─ YES → Loop Over Jobs
+        → Wait 5s → Fetch Detail → Parse → Process Job (tag, no filter) → loop back
+      → Format Results → Split Messages → Send Results Telegram
+```
+
+### Node Reference (23 functional nodes + 3 sticky notes)
+
+| # | Node Name | Type | Purpose |
+|---|-----------|------|---------|
+| 1 | Telegram Trigger | telegramTrigger | Listens for `/search` commands |
+| 2 | Parse Search Command | code | Extracts company name + days (default 7, clamped 1-90) |
+| 3 | Read Config | googleSheets | Reads Config tab (same sheet as main workflow) |
+| 4 | Lookup Company | code | Case-insensitive partial match against active companies |
+| 5 | Company Found? | if | Routes found/not-found |
+| 6 | Send Error Telegram | telegram | "Company not found" or "Invalid command" error |
+| 7 | Build Search URL | code | Builds LinkedIn URL using company's bucket keywords |
+| 8 | Loop Over URLs | splitInBatches | Handles multi-bucket partial matches |
+| 9 | Wait Between Searches | wait | 3s rate limit |
+| 10 | Fetch Search Page | httpRequest | LinkedIn search page, 30s timeout |
+| 11 | Extract Links & Titles | html | Same CSS selectors as main workflow |
+| 12 | Filter Links | code | Negative title filter + job ID extraction, no dedup |
+| 13 | Output Job Links | code | Fans out accumulated links or signals empty |
+| 14 | Has Links? | if | Routes to job processing or no-results message |
+| 15 | Send No Results Telegram | telegram | "No openings found in Bengaluru" |
+| 16 | Loop Over Jobs | splitInBatches | Iterates job detail fetches |
+| 17 | Wait Between Jobs | wait | 5s rate limit |
+| 18 | Fetch Job Detail | httpRequest | Individual job page, 30s timeout |
+| 19 | Parse Job Details | html | Same CSS selectors as main workflow |
+| 20 | Process Job | code | Experience extraction + tagging, NO filtering |
+| 21 | Format Results | code | Builds message with header, splits at 4096 chars |
+| 22 | Split Messages | code | Fans out message chunks |
+| 23 | Send Results Telegram | telegram | Sends result message(s) |
+
+### Telegram Message Formats
+
+**Results found:**
+```
+🔍 Jobs at Oracle (last 30 days)
+
+Found 5 openings in Bengaluru:
+
+1. Oracle — Software Engineer III (3-5 yrs) [SE-III]
+   📍 Bengaluru, India
+   https://linkedin.com/jobs/view/123
+```
+
+**No results:** `🔍 Jobs at Oracle (last 30 days) — No openings found in Bengaluru for this time period.`
+
+**Company not found:** `Company 'RandomCorp' not found in config. Add it to the Config sheet with its LinkedIn Company ID to enable search.`
+
+**Invalid command:** Usage examples with `/search CompanyName [Days]` format.
+
+### Setup
+1. Import `n8n_company_search_v1.json` into n8n (separate workflow from the main one)
+2. Connect the same Google Sheets and Telegram credentials
+3. Activate the workflow (requires HTTPS for Telegram webhook)
+4. Both workflows share the same Telegram bot — n8n routes `/jobs` and `/search` to their respective workflows
 
 ## V2 Roadmap
 - LLM scoring (Gemini Flash free tier)
