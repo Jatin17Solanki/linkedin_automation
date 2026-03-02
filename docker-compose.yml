@@ -1,3 +1,4 @@
+# Local development only. For production deployment, see deploy/docker-compose.prod.yml
 version: '3.8'
 
 services:

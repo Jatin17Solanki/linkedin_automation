@@ -206,7 +206,48 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 - Message splitting: Telegram messages auto-split at 4096 char limit
 - Honest filtering: Never fabricate matches. If experience can't be parsed, pass through as "Not specified"
 
-## V2 Roadmap (not in scope now)
+## Production Deployment (GCP e2-micro)
+
+### Architecture
+```
+Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Docker volume)
+```
+- VM: GCP e2-micro, Ubuntu 22.04, us-central1-a (always-free tier)
+- Domain: `<VM_IP>.nip.io` (free, no DNS registration)
+- HTTPS: Let's Encrypt via Caddy (automatic)
+
+### Deployment Files
+| File | Purpose |
+|------|---------|
+| `deploy/docker-compose.prod.yml` | Production compose with n8n + Caddy |
+| `deploy/Caddyfile` | Caddy reverse proxy config |
+| `deploy/setup.sh` | One-time VM setup (Docker, dirs, services) |
+| `deploy/import-workflow.sh` | Import/update workflow via n8n REST API |
+| `.github/workflows/deploy.yml` | CI/CD — auto-deploy on push to main |
+
+### GCP VM Setup
+1. Create e2-micro VM (Ubuntu 22.04, us-central1-a) with HTTP/HTTPS firewall enabled
+3. SSH in, clone the repo, run `sudo bash deploy/setup.sh`
+4. Open `https://<VM_IP>.nip.io`, set up Google Sheets + Telegram credentials
+5. Import workflow, enable Telegram Trigger node, activate workflow
+6. Generate n8n API key (Settings > API) for CI/CD
+
+### GitHub Actions CI/CD
+Auto-deploys workflow changes when `n8n_job_search_v1.json` is pushed to `main`.
+
+**Required GitHub Secrets:**
+| Secret | Value |
+|--------|-------|
+| `GCP_VM_IP` | VM external IP address |
+| `GCP_SSH_PRIVATE_KEY` | SSH private key for the VM |
+| `GCP_SSH_USER` | SSH username (your Gmail username) |
+| `N8N_API_KEY` | n8n API key from Settings > API |
+
+### Enabling Telegram Trigger on Cloud
+1. In n8n UI, enable the "Telegram Trigger" node (right-click > Enable)
+2. Optionally disable the "Webhook Trigger" node (not needed on cloud)
+3. Save and activate the workflow — Telegram will auto-register its webhook with n8n's HTTPS URL
+
+## V2 Roadmap
 - LLM scoring (Gemini Flash free tier)
 - Auto resume customization
-- Cloud deployment (GCP e2-micro)

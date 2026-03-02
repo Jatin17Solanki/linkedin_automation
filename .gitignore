@@ -1,0 +1,6 @@
+# Environment files with secrets
+.env
+deploy/.env
+
+# n8n data
+n8n_data/

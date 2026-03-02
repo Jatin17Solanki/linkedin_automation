@@ -1,0 +1,57 @@
+name: Deploy Workflow to n8n
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'n8n_job_search_v1.json'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Copy workflow to VM and import
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.GCP_VM_IP }}
+          username: ${{ secrets.GCP_SSH_USER }}
+          key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            # Create temp dir for the workflow file
+            TMPDIR=$(mktemp -d)
+            trap "rm -rf $TMPDIR" EXIT
+
+            # Write workflow JSON (passed via stdin)
+            cat > "$TMPDIR/workflow.json" << 'WORKFLOW_EOF'
+            ${{ '' }}
+            WORKFLOW_EOF
+
+      - name: Upload workflow file
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GCP_VM_IP }}
+          username: ${{ secrets.GCP_SSH_USER }}
+          key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+          source: "n8n_job_search_v1.json,deploy/import-workflow.sh"
+          target: "/tmp/n8n-deploy"
+          overwrite: true
+
+      - name: Import workflow via n8n API
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.GCP_VM_IP }}
+          username: ${{ secrets.GCP_SSH_USER }}
+          key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            cd /tmp/n8n-deploy
+            chmod +x deploy/import-workflow.sh
+            bash deploy/import-workflow.sh \
+              n8n_job_search_v1.json \
+              "https://${{ secrets.GCP_VM_IP }}.nip.io" \
+              "${{ secrets.N8N_API_KEY }}"
+            rm -rf /tmp/n8n-deploy
