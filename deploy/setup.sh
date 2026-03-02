@@ -2,7 +2,10 @@
 set -euo pipefail
 
 # One-time setup script for GCP e2-micro VM
-# Run as: sudo bash setup.sh
+# Run from repo root: sudo bash deploy/setup.sh
+
+# Resolve the directory where this script lives
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== n8n Production Setup ==="
 
@@ -31,10 +34,10 @@ DEPLOY_DIR="/opt/n8n"
 mkdir -p "$DEPLOY_DIR"
 
 # Copy files
-cp docker-compose.prod.yml "$DEPLOY_DIR/docker-compose.yml"
+cp "$SCRIPT_DIR/docker-compose.prod.yml" "$DEPLOY_DIR/docker-compose.yml"
 
 # Write Caddyfile with actual IP substituted
-sed "s/\${VM_IP}/$VM_IP/g" Caddyfile > "$DEPLOY_DIR/Caddyfile"
+sed "s/\${VM_IP}/$VM_IP/g" "$SCRIPT_DIR/Caddyfile" > "$DEPLOY_DIR/Caddyfile"
 
 # Create .env file
 ENV_FILE="$DEPLOY_DIR/.env"
