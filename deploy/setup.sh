@@ -37,7 +37,7 @@ mkdir -p "$DEPLOY_DIR"
 cp "$SCRIPT_DIR/docker-compose.prod.yml" "$DEPLOY_DIR/docker-compose.yml"
 
 # Write Caddyfile with actual IP substituted
-sed "s/\${VM_IP}/$VM_IP/g" "$SCRIPT_DIR/Caddyfile" > "$DEPLOY_DIR/Caddyfile"
+sed "s/PLACEHOLDER_VM_IP/$VM_IP/g" "$SCRIPT_DIR/Caddyfile" > "$DEPLOY_DIR/Caddyfile"
 
 # Create .env file
 ENV_FILE="$DEPLOY_DIR/.env"
