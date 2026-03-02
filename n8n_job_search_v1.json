@@ -1,0 +1,787 @@
+{
+  "name": "LinkedIn Job Search V1",
+  "nodes": [
+    {
+      "id": "a1000001-0001-0001-0001-000000000001",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-800, -400],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7,19 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000002",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-800, -200]
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000003",
+      "name": "Read Config",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [-400, -400],
+      "parameters": {
+        "options": {},
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gid=0",
+          "cachedResultName": "Config"
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "Job Search Automation"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURE_ME",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000004",
+      "name": "Store Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-100, -400],
+      "parameters": {
+        "jsCode": "// Store config data in workflow static data for use by later nodes\nconst staticData = $getWorkflowStaticData('global');\n\n// Store all config rows\nstaticData.config = $input.all().map(i => i.json);\n\n// Initialize accumulators\nstaticData.newJobLinks = [];\nstaticData.existingJobIds = {};\n\nconst activeCount = staticData.config.filter(c => \n  String(c.Active).toUpperCase() === 'TRUE' || c.Active === true\n).length;\n\nconsole.log(`Config loaded: ${staticData.config.length} companies, ${activeCount} active`);\n\nreturn [{json: {configLoaded: true, totalCompanies: staticData.config.length, activeCompanies: activeCount}}];"
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000005",
+      "name": "Read Results",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [200, -400],
+      "parameters": {
+        "options": {},
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gid=0",
+          "cachedResultName": "Results"
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "Job Search Automation"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURE_ME",
+          "name": "Google Sheets account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000006",
+      "name": "Build Search URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, -400],
+      "parameters": {
+        "jsCode": "// ============================================================\n// SETTINGS — Change these before manual runs if needed\n// ============================================================\nconst TIME_WINDOW_SECONDS = 43200;  // 12 hours. Change to 7200 for 2-hour window, etc.\nconst LOCATION = 'India';           // Search location\n// ============================================================\n\nconst staticData = $getWorkflowStaticData('global');\nconst config = staticData.config || [];\nconst results = $input.all().map(i => i.json);\n\n// Build dedup set from existing results\nconst existingJobIds = {};\nfor (const r of results) {\n  if (r.JobID) existingJobIds[String(r.JobID)] = true;\n}\nstaticData.existingJobIds = existingJobIds;\nstaticData.newJobLinks = [];\n\nconsole.log(`Dedup set loaded: ${Object.keys(existingJobIds).length} existing job IDs`);\n\n// Define keyword templates per bucket\nconst bucketKeywords = {\n  '1': '\"software development engineer\" OR \"SDE\" OR \"SDE II\" OR \"SDE 2\" OR \"SDE-II\" OR \"software engineer II\" OR \"software engineer 2\" OR \"software engineer - II\"',\n  '2': '\"software engineer III\" OR \"software engineer 3\" OR \"software developer 3\"',\n  '3': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"',\n  '4': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"'\n};\n\n// Group active companies by bucket\nconst buckets = {};\nfor (const item of config) {\n  const isActive = String(item.Active).toUpperCase() === 'TRUE' || item.Active === true;\n  if (!isActive) continue;\n  \n  const bucket = String(item.Bucket);\n  if (!buckets[bucket]) buckets[bucket] = [];\n  buckets[bucket].push(String(item.CompanyID));\n}\n\n// Build LinkedIn search URLs\nconst urls = [];\nfor (const [bucket, companyIds] of Object.entries(buckets)) {\n  const keywords = bucketKeywords[bucket];\n  if (!keywords || companyIds.length === 0) continue;\n  \n  const encodedKeywords = encodeURIComponent(keywords);\n  const companyFilter = companyIds.join(',');\n  const encodedLocation = encodeURIComponent(LOCATION);\n  \n  const url = `https://www.linkedin.com/jobs/search/?keywords=${encodedKeywords}&f_C=${companyFilter}&f_TPR=r${TIME_WINDOW_SECONDS}&location=${encodedLocation}&sortBy=DD`;\n  \n  urls.push({\n    url: url,\n    bucket: bucket,\n    companyCount: companyIds.length\n  });\n}\n\nconsole.log(`Built ${urls.length} search URLs for ${Object.keys(buckets).length} active buckets`);\n\nif (urls.length === 0) {\n  return [{json: {url: '', bucket: '0', companyCount: 0, noUrls: true}}];\n}\n\nreturn urls.map(u => ({json: u}));"
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000007",
+      "name": "Loop Over URLs",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [800, -400],
+      "parameters": {
+        "options": {}
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000008",
+      "name": "Wait Between Searches",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1000, -200],
+      "parameters": {
+        "amount": 3
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000009",
+      "name": "Fetch Search Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, -200],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000010",
+      "name": "Extract Links & Titles",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [1400, -200],
+      "parameters": {
+        "options": {},
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "links",
+              "attribute": "href",
+              "cssSelector": "ul.jobs-search__results-list li div a[class*='base-card']",
+              "returnArray": true,
+              "returnValue": "attribute"
+            },
+            {
+              "key": "titles",
+              "cssSelector": "ul.jobs-search__results-list h3.base-search-card__title",
+              "returnArray": true,
+              "returnValue": "text"
+            },
+            {
+              "key": "companies",
+              "cssSelector": "ul.jobs-search__results-list h4.base-search-card__subtitle",
+              "returnArray": true,
+              "returnValue": "text"
+            },
+            {
+              "key": "locations",
+              "cssSelector": "ul.jobs-search__results-list span.job-search-card__location",
+              "returnArray": true,
+              "returnValue": "text"
+            }
+          ]
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000011",
+      "name": "Filter & Accumulate Links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1600, -200],
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst existingIds = staticData.existingJobIds || {};\nconst newLinks = staticData.newJobLinks || [];\n\n// Get current bucket from the URL item that flowed through\nconst currentBucket = $('Loop Over URLs').first().json.bucket || '0';\n\n// Get extracted data\nconst data = $input.first().json;\nconst links = data.links || [];\nconst titles = data.titles || [];\nconst companies = data.companies || [];\nconst locations = data.locations || [];\n\n// ============================================================\n// NEGATIVE TITLE FILTER\n// Titles containing these patterns are EXCLUDED\n// ============================================================\n// For Bucket 1 & 2: also exclude 'senior' and 'sr'\nconst negativeBase = /\\b(staff|principal|lead|manager|director|ios|android|machine.?learning|data.?scien|QA|SDET|devops|SRE|site.?reliability|frontend|front.?end|intern|test.?engineer|test.?auto|platform.?engineer|infra.?engineer|cloud.?engineer|security|mobile|embedded)\\b/i;\nconst negativeSenior = /\\b(senior|sr\\.?)\\b/i;\n// ============================================================\n\nlet filtered = 0;\nlet duped = 0;\nlet added = 0;\n\nfor (let i = 0; i < links.length; i++) {\n  const url = links[i] || '';\n  const title = (titles[i] || '').trim();\n  const company = (companies[i] || '').trim();\n  const location = (locations[i] || '').trim();\n  \n  // Extract job ID from URL (last numeric segment before '?' in slug like /view/title-JOBID?...)\n  const match = url.match(/-(\\d{8,})(?:\\?|$)/);\n  const jobId = match ? match[1] : null;\n  \n  if (!jobId) continue;\n  \n  // Dedup: check existing results AND already-found links\n  if (existingIds[jobId]) { duped++; continue; }\n  const alreadyFound = newLinks.some(l => l.jobId === jobId);\n  if (alreadyFound) { duped++; continue; }\n  \n  // Apply negative title filter\n  if (negativeBase.test(title)) { filtered++; continue; }\n  \n  // For Bucket 1 & 2, also exclude 'senior'\n  if ((currentBucket === '1' || currentBucket === '2') && negativeSenior.test(title)) {\n    filtered++; continue;\n  }\n  \n  // Passed all filters! Add to accumulator\n  newLinks.push({\n    url: `https://www.linkedin.com/jobs/view/${jobId}`,\n    jobId: jobId,\n    bucket: currentBucket,\n    searchTitle: title,\n    searchCompany: company,\n    searchLocation: location\n  });\n  added++;\n}\n\nstaticData.newJobLinks = newLinks;\n\nconsole.log(`Bucket ${currentBucket}: ${links.length} total, ${added} new, ${duped} dupes, ${filtered} filtered`);\n\nreturn [{json: {processed: true, bucket: currentBucket, total: links.length, new: added, duped: duped, filtered: filtered}}];"
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000012",
+      "name": "Output New Job Links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, -600],
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst newLinks = staticData.newJobLinks || [];\n\nconsole.log(`Total new job links to process: ${newLinks.length}`);\n\nif (newLinks.length === 0) {\n  // Return dummy item so the downstream loop still completes\n  // and the notification chain runs (to catch unnotified from previous runs)\n  return [{json: {dummy: true, jobId: 'none', url: '', message: 'No new jobs found this run'}}];\n}\n\n// Clear the accumulator\nstaticData.newJobLinks = [];\n\nreturn newLinks.map(link => ({json: {...link, dummy: false}}));"
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000013",
+      "name": "Loop Over Jobs",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1500, -600],
+      "parameters": {
+        "options": {}
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000014",
+      "name": "Wait Between Jobs",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1700, -400],
+      "parameters": {
+        "amount": 5
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000015",
+      "name": "Skip If Dummy",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1900, -400],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-dummy-check",
+              "operator": {
+                "type": "boolean",
+                "operation": "notTrue"
+              },
+              "leftValue": "={{ $json.dummy }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000016",
+      "name": "Fetch Job Detail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2100, -200],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000017",
+      "name": "Parse Job Details",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [2300, -200],
+      "parameters": {
+        "options": {},
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "title",
+              "cssSelector": "div h1"
+            },
+            {
+              "key": "company",
+              "cssSelector": "div span a"
+            },
+            {
+              "key": "location",
+              "cssSelector": "div span[class*='topcard__flavor topcard__flavor--bullet']"
+            },
+            {
+              "key": "description",
+              "cssSelector": "div.description__text.description__text--rich"
+            },
+            {
+              "key": "criteria",
+              "cssSelector": "ul.description__job-criteria-list li span.description__job-criteria-text",
+              "returnArray": true,
+              "returnValue": "text"
+            }
+          ]
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000018",
+      "name": "Process & Filter Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, -200],
+      "parameters": {
+        "jsCode": "// ============================================================\n// SETTINGS\n// ============================================================\nconst MAX_EXPERIENCE_YEARS = 5;  // Skip roles requiring more than this\n// ============================================================\n\nconst parsed = $input.first().json;\n\n// Get original search data from the loop item\nlet searchData = {};\ntry {\n  searchData = $('Loop Over Jobs').first().json || {};\n} catch(e) {\n  searchData = {};\n}\n\nconst jobId = searchData.jobId || '';\nconst bucket = searchData.bucket || '';\nconst searchTitle = searchData.searchTitle || '';\nconst searchCompany = searchData.searchCompany || '';\n\n// If parsing failed or dummy, mark as invalid\nif (!parsed.title && !searchTitle) {\n  return [{json: {valid: false, reason: 'parse_failed'}}];\n}\n\nconst title = (parsed.title || searchTitle || '').trim();\nconst company = (parsed.company || searchCompany || '').trim();\nconst location = (parsed.location || searchData.searchLocation || '').trim();\nconst description = (parsed.description || '').replace(/\\s+/g, ' ').trim();\nconst criteria = parsed.criteria || [];\n\n// ============================================================\n// EXPERIENCE EXTRACTION (regex-based, no LLM needed)\n// ============================================================\nlet expText = 'Not specified';\nlet minExp = null;\nlet maxExp = null;\n\n// Try extracting from description\nconst descLower = description.toLowerCase();\n\n// Patterns: \"3+ years\", \"3-5 years\", \"3 to 5 years\", \"minimum 3 years\", \"at least 3 years\"\nconst expPatterns = [\n  /(\\d+)\\s*\\+\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*[-–to]+\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(?:minimum|at least|min\\.?)\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*(?:years|yrs)\\s*(?:of)?\\s*(?:experience|exp)/i\n];\n\nfor (const pattern of expPatterns) {\n  const match = descLower.match(pattern);\n  if (match) {\n    minExp = parseInt(match[1]);\n    maxExp = match[2] ? parseInt(match[2]) : null;\n    expText = match[0].trim();\n    break;\n  }\n}\n\n// Also check criteria list (LinkedIn structured data)\nfor (const c of criteria) {\n  const cLower = (c || '').toLowerCase().trim();\n  // Sometimes criteria has \"Mid-Senior level\" or \"Entry level\"\n  if (cLower.includes('entry')) {\n    if (!minExp) { minExp = 0; expText = cLower; }\n  } else if (cLower.includes('mid-senior')) {\n    if (!minExp) { minExp = 3; expText = cLower; }\n  }\n}\n\n// ============================================================\n// FILTER: Skip if experience requirement > threshold\n// ============================================================\nconst skipDueToExp = minExp !== null && minExp > MAX_EXPERIENCE_YEARS;\n\nif (skipDueToExp) {\n  console.log(`Skipping ${title} at ${company}: requires ${expText} (min ${minExp} yrs > ${MAX_EXPERIENCE_YEARS})`);\n  return [{json: {valid: false, reason: 'experience_too_high', title, company, expText}}];\n}\n\n// ============================================================\n// DETERMINE PRIMARY TAG\n// ============================================================\nlet primaryTag = 'Generic';\nconst titleLower = title.toLowerCase();\nif (/sde.?(?:ii|2)/i.test(titleLower)) primaryTag = 'SDE-II';\nelse if (/software.*engineer.*(?:iii|3)/i.test(titleLower)) primaryTag = 'SE-III';\nelse if (/mts|member.*technical/i.test(titleLower)) primaryTag = 'MTS';\nelse if (/senior|sr/i.test(titleLower)) primaryTag = 'Senior';\nelse if (/backend|back.?end/i.test(titleLower)) primaryTag = 'Backend';\nelse primaryTag = 'Generic';\n\n// ============================================================\n// BUILD RESULT ROW\n// ============================================================\nconst now = new Date().toISOString();\n\nreturn [{json: {\n  valid: true,\n  JobID: jobId,\n  Title: title,\n  Company: company,\n  Location: location,\n  Link: `https://www.linkedin.com/jobs/view/${jobId}`,\n  ExperienceReq: expText,\n  DatePosted: '',\n  FirstSeen: now,\n  Bucket: bucket,\n  PrimaryTag: primaryTag,\n  Notified: 'FALSE',\n  Score: '',\n  Status: 'New'\n}}];"
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000019",
+      "name": "Is Valid Job?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2700, -200],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-valid-check",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000020",
+      "name": "Append to Results",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [2900, -400],
+      "parameters": {
+        "columns": {
+          "value": {
+            "JobID": "={{ $json.JobID }}",
+            "Title": "={{ $json.Title }}",
+            "Company": "={{ $json.Company }}",
+            "Location": "={{ $json.Location }}",
+            "Link": "={{ $json.Link }}",
+            "ExperienceReq": "={{ $json.ExperienceReq }}",
+            "DatePosted": "={{ $json.DatePosted }}",
+            "FirstSeen": "={{ $json.FirstSeen }}",
+            "Bucket": "={{ $json.Bucket }}",
+            "PrimaryTag": "={{ $json.PrimaryTag }}",
+            "Notified": "={{ $json.Notified }}",
+            "Score": "={{ $json.Score }}",
+            "Status": "={{ $json.Status }}"
+          },
+          "schema": [
+            {"id": "JobID", "type": "string", "display": true, "required": false, "displayName": "JobID", "defaultMatch": true, "canBeUsedToMatch": true},
+            {"id": "Title", "type": "string", "display": true, "required": false, "displayName": "Title", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "Company", "type": "string", "display": true, "required": false, "displayName": "Company", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "Location", "type": "string", "display": true, "required": false, "displayName": "Location", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "Link", "type": "string", "display": true, "required": false, "displayName": "Link", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "ExperienceReq", "type": "string", "display": true, "required": false, "displayName": "ExperienceReq", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "DatePosted", "type": "string", "display": true, "required": false, "displayName": "DatePosted", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "FirstSeen", "type": "string", "display": true, "required": false, "displayName": "FirstSeen", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "Bucket", "type": "string", "display": true, "required": false, "displayName": "Bucket", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "PrimaryTag", "type": "string", "display": true, "required": false, "displayName": "PrimaryTag", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "Notified", "type": "string", "display": true, "required": false, "displayName": "Notified", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "Score", "type": "string", "display": true, "required": false, "displayName": "Score", "defaultMatch": false, "canBeUsedToMatch": true},
+            {"id": "Status", "type": "string", "display": true, "required": false, "displayName": "Status", "defaultMatch": false, "canBeUsedToMatch": true}
+          ],
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["JobID"],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {},
+        "operation": "appendOrUpdate",
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gid=0",
+          "cachedResultName": "Results"
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "Job Search Automation"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURE_ME",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000021",
+      "name": "Read Unnotified",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [1900, -800],
+      "parameters": {
+        "options": {
+          "returnAllMatches": true
+        },
+        "filters": {
+          "conditions": [
+            {
+              "condition": "equal",
+              "value1": "Notified",
+              "value2": "FALSE"
+            }
+          ]
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gid=0",
+          "cachedResultName": "Results"
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "Job Search Automation"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURE_ME",
+          "name": "Google Sheets account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000022",
+      "name": "Format Telegram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, -800],
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Filter out items that don't look like job results\nconst jobs = items.filter(i => i.json.JobID && i.json.Title && i.json.Notified === 'FALSE');\n\nif (jobs.length === 0) {\n  return [{json: {hasJobs: false, message: 'No new jobs to notify', jobIds: []}}];\n}\n\n// Build Telegram message\nlet message = `\\u{1F514} ${jobs.length} New Opening${jobs.length > 1 ? 's' : ''} Found\\n\\n`;\n\nfor (let i = 0; i < jobs.length; i++) {\n  const j = jobs[i].json;\n  const num = i + 1;\n  const exp = j.ExperienceReq && j.ExperienceReq !== 'Not specified' ? ` (${j.ExperienceReq})` : '';\n  const tag = j.PrimaryTag ? ` [${j.PrimaryTag}]` : '';\n  \n  message += `${num}. ${j.Company} \\u2014 ${j.Title}${exp}${tag}\\n`;\n  message += `   \\u{1F4CD} ${j.Location || 'N/A'}\\n`;\n  message += `   \\u{1F517} ${j.Link}\\n\\n`;\n}\n\n// Collect job IDs for marking as notified\nconst jobIds = jobs.map(j => j.json.JobID);\n\nreturn [{json: {\n  hasJobs: true,\n  message: message.trim(),\n  jobIds: jobIds,\n  count: jobs.length\n}}];"
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000023",
+      "name": "Has New Jobs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2500, -800],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-has-jobs",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ $json.hasJobs }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000024",
+      "name": "Send Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2800, -900],
+      "parameters": {
+        "chatId": "CONFIGURE_ME",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "CONFIGURE_ME",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000025",
+      "name": "Mark Jobs Notified",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3100, -900],
+      "parameters": {
+        "jsCode": "// Output individual items for each job ID to update\nconst jobIds = $input.first().json.jobIds || [];\n\nif (jobIds.length === 0) {\n  return [{json: {nothing: true}}];\n}\n\nreturn jobIds.map(id => ({\n  json: {\n    JobID: id,\n    Notified: 'TRUE'\n  }\n}));"
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000026",
+      "name": "Update Notified Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [3400, -900],
+      "parameters": {
+        "columns": {
+          "value": {
+            "JobID": "={{ $json.JobID }}",
+            "Notified": "={{ $json.Notified }}"
+          },
+          "schema": [
+            {"id": "JobID", "type": "string", "display": true, "required": false, "displayName": "JobID", "defaultMatch": true, "canBeUsedToMatch": true},
+            {"id": "Notified", "type": "string", "display": true, "required": false, "displayName": "Notified", "defaultMatch": false, "canBeUsedToMatch": false}
+          ],
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["JobID"],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {},
+        "operation": "appendOrUpdate",
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gid=0",
+          "cachedResultName": "Results"
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "Job Search Automation"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURE_ME",
+          "name": "Google Sheets account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000027",
+      "name": "Send No Results Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2800, -700],
+      "parameters": {
+        "chatId": "CONFIGURE_ME",
+        "text": "\u2705 Job search ran successfully — no new openings found this run.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "CONFIGURE_ME",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "id": "sticky-01",
+      "name": "Sticky Note - Triggers",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-880, -520],
+      "parameters": {
+        "width": 300,
+        "height": 440,
+        "color": 4,
+        "content": "## Triggers\n\n**Schedule:** Runs at 7 AM and 7 PM IST daily.\n\n**Manual:** Click 'Execute Workflow' for ad-hoc runs.\n\n**Tip:** For custom time windows, open 'Build Search URLs' node and change `TIME_WINDOW_SECONDS` before manual trigger.\n- 12 hours = 43200\n- 6 hours = 21600\n- 2 hours = 7200"
+      }
+    },
+    {
+      "id": "sticky-02",
+      "name": "Sticky Note - Config",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-480, -520],
+      "parameters": {
+        "width": 650,
+        "height": 200,
+        "color": 5,
+        "content": "## Config Sheet\nReads company list from Google Sheet 'Config' tab.\nColumns: **Company** | **CompanyID** | **Bucket** (1-4) | **Active** (TRUE/FALSE)\nTo add a company: add row, assign bucket, set Active=TRUE. Next run picks it up."
+      }
+    },
+    {
+      "id": "sticky-03",
+      "name": "Sticky Note - Search Loop",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [900, -120],
+      "parameters": {
+        "width": 820,
+        "height": 200,
+        "color": 6,
+        "content": "## Search Loop\nFor each bucket URL: fetch LinkedIn search page → extract job cards (links + titles + companies) → apply negative title filter → dedup against existing results → accumulate new links.\n\nNegative filters: staff, principal, lead, manager, director, ios, android, ML, data science, QA, SDET, DevOps, SRE, frontend, intern, test, platform, infra, cloud, security, mobile, embedded.\nBuckets 1 & 2 also filter 'senior'."
+      }
+    },
+    {
+      "id": "sticky-04",
+      "name": "Sticky Note - Job Processing",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1600, -120],
+      "parameters": {
+        "width": 1200,
+        "height": 200,
+        "color": 7,
+        "content": "## Job Processing Loop\nFor each new job: fetch detail page → parse title/company/location/description → extract experience requirement via regex → skip if >5 years → tag with PrimaryTag → write to Results sheet.\n\nExperience patterns: '3+ years', '3-5 years', 'minimum 3 years', 'at least 3 yrs'. Roles with unparseable experience pass through as 'Not specified' for manual review."
+      }
+    },
+    {
+      "id": "sticky-05",
+      "name": "Sticky Note - Notification",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1800, -1020],
+      "parameters": {
+        "width": 900,
+        "height": 200,
+        "color": 3,
+        "content": "## Notification Chain\nAfter all processing: read Results where Notified=FALSE → format batched Telegram message → send → mark as notified.\nHandles leftover unnotified jobs from previous failed runs too."
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [{"node": "Read Config", "type": "main", "index": 0}]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [{"node": "Read Config", "type": "main", "index": 0}]
+      ]
+    },
+    "Read Config": {
+      "main": [
+        [{"node": "Store Config", "type": "main", "index": 0}]
+      ]
+    },
+    "Store Config": {
+      "main": [
+        [{"node": "Read Results", "type": "main", "index": 0}]
+      ]
+    },
+    "Read Results": {
+      "main": [
+        [{"node": "Build Search URLs", "type": "main", "index": 0}]
+      ]
+    },
+    "Build Search URLs": {
+      "main": [
+        [{"node": "Loop Over URLs", "type": "main", "index": 0}]
+      ]
+    },
+    "Loop Over URLs": {
+      "main": [
+        [{"node": "Output New Job Links", "type": "main", "index": 0}],
+        [{"node": "Wait Between Searches", "type": "main", "index": 0}]
+      ]
+    },
+    "Wait Between Searches": {
+      "main": [
+        [{"node": "Fetch Search Page", "type": "main", "index": 0}]
+      ]
+    },
+    "Fetch Search Page": {
+      "main": [
+        [{"node": "Extract Links & Titles", "type": "main", "index": 0}]
+      ]
+    },
+    "Extract Links & Titles": {
+      "main": [
+        [{"node": "Filter & Accumulate Links", "type": "main", "index": 0}]
+      ]
+    },
+    "Filter & Accumulate Links": {
+      "main": [
+        [{"node": "Loop Over URLs", "type": "main", "index": 0}]
+      ]
+    },
+    "Output New Job Links": {
+      "main": [
+        [{"node": "Loop Over Jobs", "type": "main", "index": 0}]
+      ]
+    },
+    "Loop Over Jobs": {
+      "main": [
+        [{"node": "Read Unnotified", "type": "main", "index": 0}],
+        [{"node": "Wait Between Jobs", "type": "main", "index": 0}]
+      ]
+    },
+    "Wait Between Jobs": {
+      "main": [
+        [{"node": "Skip If Dummy", "type": "main", "index": 0}]
+      ]
+    },
+    "Skip If Dummy": {
+      "main": [
+        [{"node": "Fetch Job Detail", "type": "main", "index": 0}],
+        [{"node": "Loop Over Jobs", "type": "main", "index": 0}]
+      ]
+    },
+    "Fetch Job Detail": {
+      "main": [
+        [{"node": "Parse Job Details", "type": "main", "index": 0}]
+      ]
+    },
+    "Parse Job Details": {
+      "main": [
+        [{"node": "Process & Filter Job", "type": "main", "index": 0}]
+      ]
+    },
+    "Process & Filter Job": {
+      "main": [
+        [{"node": "Is Valid Job?", "type": "main", "index": 0}]
+      ]
+    },
+    "Is Valid Job?": {
+      "main": [
+        [{"node": "Append to Results", "type": "main", "index": 0}],
+        [{"node": "Loop Over Jobs", "type": "main", "index": 0}]
+      ]
+    },
+    "Append to Results": {
+      "main": [
+        [{"node": "Loop Over Jobs", "type": "main", "index": 0}]
+      ]
+    },
+    "Read Unnotified": {
+      "main": [
+        [{"node": "Format Telegram", "type": "main", "index": 0}]
+      ]
+    },
+    "Format Telegram": {
+      "main": [
+        [{"node": "Has New Jobs?", "type": "main", "index": 0}]
+      ]
+    },
+    "Has New Jobs?": {
+      "main": [
+        [{"node": "Send Telegram", "type": "main", "index": 0}],
+        [{"node": "Send No Results Telegram", "type": "main", "index": 0}]
+      ]
+    },
+    "Send Telegram": {
+      "main": [
+        [{"node": "Mark Jobs Notified", "type": "main", "index": 0}]
+      ]
+    },
+    "Mark Jobs Notified": {
+      "main": [
+        [{"node": "Update Notified Status", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}

@@ -1,0 +1,51 @@
+Company,CompanyID,Bucket,Active,Notes
+Amazon,1586,1,TRUE,SDE II / SDE 2
+Flipkart,321062,1,TRUE,SDE II
+Expedia,2751,1,TRUE,SDE II
+Zeta,10355561,1,TRUE,SDE II
+InMobi,272972,1,TRUE,SDE II
+Slice,30246063,1,TRUE,SDE 2 Backend
+Groww,10813156,1,TRUE,SDE 2
+Akamai,3925,1,TRUE,SE II
+Wayfair,19857,1,TRUE,SE II
+Rippling,17988315,1,TRUE,SE II
+Intuit,1666,1,TRUE,SE 2
+Microsoft,1035,1,TRUE,SE II
+Oracle,1028,2,TRUE,SE III / Developer 3
+Google,1441,2,TRUE,SE III
+Walmart Global Tech India,9390173,2,TRUE,SE III
+eBay,1481,2,TRUE,SE 3
+Adobe,1480,3,TRUE,MTS / SDE-II
+Salesforce,3185,3,TRUE,MTS
+Myntra,361348,3,TRUE,Senior = mid-level
+PayPal,1482,3,TRUE,Senior = mid-level / Backend
+MakemyTrip,35113,3,TRUE,Senior SE I/II
+PhonePe,10479149,3,TRUE,SE Backend
+Apple,162479,3,TRUE,Generic search
+Meta,10667,3,TRUE,Generic search
+LinkedIn,1337,3,TRUE,Generic search
+Netflix,165158,3,TRUE,Generic search
+Uber,1815218,3,TRUE,Generic search
+Databricks,3477522,3,TRUE,Generic search
+Atlassian,22688,4,TRUE,Generic search
+Nvidia,3608,4,TRUE,Generic search
+Airbnb,309694,4,TRUE,Generic search
+Confluent,88873,4,TRUE,Generic search
+ServiceNow,29352,4,TRUE,Generic search
+Workday,17719,4,TRUE,Generic search
+Rubrik,4840301,4,TRUE,Generic search
+Slack,1612748,4,TRUE,Generic search
+Nutanix,735085,4,TRUE,Generic search
+OpenTable,12181,4,TRUE,Generic search
+Observe.ai,18090845,4,TRUE,Generic search
+Acko,13250135,4,TRUE,Generic search
+Upstox,15091079,4,TRUE,Generic search
+Cred,14485479,4,TRUE,Generic search
+SuperMoney,13244834,4,TRUE,Generic search
+ClearTax,74474022,4,TRUE,Generic search
+Blinkit,80918929,4,TRUE,Generic search
+Directi,29570,4,TRUE,Generic search
+DeShaw,6508,4,TRUE,Generic search
+Kotak Mahindra Bank,5632,4,TRUE,Generic search
+ClearTrip,62902,4,TRUE,Generic search
+Swiggy,9252341,4,TRUE,Generic search
