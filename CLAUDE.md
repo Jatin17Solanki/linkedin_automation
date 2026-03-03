@@ -5,7 +5,7 @@ An n8n automation workflow (`n8n_job_search_v1.json`) that searches LinkedIn's p
 
 ## File Locations
 - **Main workflow:** `n8n_job_search_v1.json` — scheduled job search (33 functional nodes + 5 sticky notes)
-- **Company search:** `n8n_company_search_v1.json` — on-demand `/search` command (23 functional nodes + 3 sticky notes)
+- **Company search:** `n8n_company_search_v1.json` — on-demand `/search` command with LLM resume matching (30 functional nodes + 4 sticky notes)
 
 ## Architecture Overview
 
@@ -271,6 +271,8 @@ A separate, stateless workflow (`n8n_company_search_v1.json`) for searching a sp
 | Experience filter | Same | Same (skips >4 yrs min) |
 | Sheet writes | Appends to Results | None (stateless) |
 | Notification tracking | Marks Notified=TRUE | None |
+| LLM matching | None | Gemini Flash resume matching (match %, summary, gaps) |
+| Email notification | None | Gmail with detailed match analysis (when LLM succeeds) |
 
 ### Architecture
 ```
@@ -285,11 +287,16 @@ Telegram Trigger (/search)
     → Output Job Links → Has Links?
       ├─ NO → Send No Results Telegram
       └─ YES → Loop Over Jobs
-        → Wait 5s → Fetch Detail → Parse → Process Job (tag, no filter) → loop back
-      → Format Results → Split Messages → Send Results Telegram
+        → Wait 5s → Fetch Detail → Parse → Process Job (tag + save description) → loop back
+      → Read Resume → Prepare LLM Input → Call Gemini Flash → Parse LLM Response
+      → Format Telegram (enriched with match % if LLM succeeded, plain fallback if failed)
+      → Split Messages → Send Results Telegram
+      → LLM Succeeded?
+        ├─ YES → Format Email → Send Gmail (detailed with summary + gaps)
+        └─ NO → (end, no email)
 ```
 
-### Node Reference (23 functional nodes + 3 sticky notes)
+### Node Reference (30 functional nodes + 4 sticky notes)
 
 | # | Node Name | Type | Purpose |
 |---|-----------|------|---------|
@@ -312,14 +319,39 @@ Telegram Trigger (/search)
 | 17 | Wait Between Jobs | wait | 5s rate limit |
 | 18 | Fetch Job Detail | httpRequest | Individual job page, 30s timeout |
 | 19 | Parse Job Details | html | Same CSS selectors as main workflow |
-| 20 | Process Job | code | Experience extraction + tagging, NO filtering |
-| 21 | Format Results | code | Builds message with header, splits at 4096 chars |
+| 20 | Process Job | code | Experience extraction + tagging + saves description for LLM |
+| 21 | Format Telegram | code | Enriched format (match %, colors) or plain fallback |
 | 22 | Split Messages | code | Fans out message chunks |
 | 23 | Send Results Telegram | telegram | Sends result message(s) |
+| 24 | Read Resume | googleSheets | Reads "Resume" tab (Key/Value pairs) from same sheet |
+| 25 | Prepare LLM Input | code | Builds Gemini prompt with resume + job descriptions |
+| 26 | Call Gemini Flash | httpRequest | POST to Gemini 2.0 Flash API (60s timeout, continueOnFail) |
+| 27 | Parse LLM Response | code | Validates & merges match scores into jobs, sorts by match % |
+| 28 | LLM Succeeded? | if | Routes: LLM worked → email, LLM failed → end |
+| 29 | Format Email | code | Builds detailed email with summary, matches, gaps per job |
+| 30 | Send Gmail | gmail | Sends detailed results email |
 
 ### Telegram Message Formats
 
-**Results found:**
+**Results found (LLM enriched — sorted by match %):**
+```
+🔍 Jobs at Oracle (last 30 days) — 5 openings
+
+1. 🟢 82% — Software Engineer III (3-5 yrs) [SE-III]
+   📍 Bengaluru, India
+   🔗 https://linkedin.com/jobs/view/123
+
+2. 🟡 65% — Backend Engineer (3+ yrs) [Backend]
+   📍 Bengaluru, India
+   🔗 https://linkedin.com/jobs/view/456
+
+3. 🔴 38% — Cloud Engineer (5+ yrs) [Generic]
+   📍 Bengaluru, India
+   🔗 https://linkedin.com/jobs/view/789
+```
+Color coding: 🟢 ≥70%, 🟡 50-69%, 🔴 <50%
+
+**Results found (LLM fallback — plain format):**
 ```
 🔍 Jobs at Oracle (last 30 days)
 
@@ -328,7 +360,13 @@ Found 5 openings in Bengaluru:
 1. Oracle — Software Engineer III (3-5 yrs) [SE-III]
    📍 Bengaluru, India
    https://linkedin.com/jobs/view/123
+
+⚠️ AI matching unavailable this run.
 ```
+
+**Gmail (detailed — sent only when LLM succeeds):**
+Subject: `🔍 Oracle — 5 openings found (/search)`
+Body includes per-job: match %, summary, key matches, key gaps, link.
 
 **No results:** `🔍 Jobs at Oracle (last 30 days) — No openings found in Bengaluru for this time period.`
 
@@ -336,12 +374,43 @@ Found 5 openings in Bengaluru:
 
 **Invalid command:** Usage examples with `/search CompanyName [Days]` format.
 
+### Resume Tab (Google Sheet)
+
+New "Resume" tab in the same Google Sheet — two-column Key/Value layout:
+
+| Key | Value |
+|-----|-------|
+| name | Jatin Solanki |
+| title | Backend/Full-Stack Engineer |
+| years_experience | 3.5 |
+| target_roles | SDE-II, Software Engineer, Backend Engineer |
+| skills_languages | Java, Python, JavaScript, TypeScript |
+| skills_frameworks | Spring Boot, Node.js, Express, React |
+| skills_databases | PostgreSQL, MongoDB, Redis, Elasticsearch |
+| skills_cloud | AWS (EC2, S3, Lambda, SQS), Docker, Kubernetes |
+| skills_other | System Design, Microservices, REST APIs, GraphQL, CI/CD |
+| experience_summary | (free text — key roles, achievements) |
+| education | B.Tech Computer Science, NIT, 2020 |
+| highlights | Led X, Built Y, Improved Z by N% |
+
+### LLM Matching (Gemini Flash)
+
+- API: `POST generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`
+- API key via `$env.GEMINI_API_KEY` (free tier from Google AI Studio)
+- `responseMimeType: "application/json"` forces valid JSON output
+- `temperature: 0.1` for consistent scoring
+- Scoring: skills overlap (40%), experience fit (30%), domain relevance (20%), seniority alignment (10%)
+- Job descriptions truncated to 3000 chars each to stay within token budget
+- If LLM fails (rate limit, timeout, parse error): falls back to plain Telegram format, skips email
+
 ### Setup
 1. Import `n8n_company_search_v1.json` into n8n (separate workflow from the main one)
 2. Connect the same Google Sheets and Telegram credentials
-3. Activate the workflow (requires HTTPS for Telegram webhook)
-4. Both workflows share the same Telegram bot — n8n routes `/jobs` and `/search` to their respective workflows
+3. **Resume tab:** Create a "Resume" tab in the Google Sheet with Key/Value columns (referenced by name, not GID), populate with your profile
+4. **Gemini API key:** Get a free key from https://aistudio.google.com/apikey, add `GEMINI_API_KEY` to Docker compose environment, restart
+5. **Gmail:** Create Gmail OAuth2 credential in n8n (enable Gmail API + `gmail.send` scope in GCP console), update `sendTo` email in Send Gmail node
+6. Activate the workflow (requires HTTPS for Telegram webhook)
+8. Both workflows share the same Telegram bot — n8n routes `/jobs` and `/search` to their respective workflows
 
 ## V2 Roadmap
-- LLM scoring (Gemini Flash free tier)
 - Auto resume customization
