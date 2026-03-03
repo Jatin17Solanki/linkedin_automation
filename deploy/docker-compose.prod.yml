@@ -47,11 +47,14 @@ services:
 
 volumes:
   n8n_data:
-    driver: local
+    external: true
+    name: n8n_n8n_data
   caddy_data:
-    driver: local
+    external: true
+    name: n8n_caddy_data
   caddy_config:
-    driver: local
+    external: true
+    name: n8n_caddy_config
 
 networks:
   n8n-net:
