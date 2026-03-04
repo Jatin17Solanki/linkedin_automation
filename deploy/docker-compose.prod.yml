@@ -16,6 +16,8 @@ services:
       - N8N_HOST=${VM_IP}.nip.io
       - N8N_PROTOCOL=https
       - N8N_EDITOR_BASE_URL=https://${VM_IP}.nip.io/
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - N8N_EXTERNAL_ALLOWED_ENVIRONMENT_VARIABLES=GEMINI_API_KEY
     volumes:
       - n8n_data:/home/node/.n8n
     healthcheck:
@@ -33,6 +35,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      - VM_IP=${VM_IP}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -44,11 +48,14 @@ services:
 
 volumes:
   n8n_data:
-    driver: local
+    external: true
+    name: n8n_n8n_data
   caddy_data:
-    driver: local
+    external: true
+    name: n8n_caddy_data
   caddy_config:
-    driver: local
+    external: true
+    name: n8n_caddy_config
 
 networks:
   n8n-net:
