@@ -250,7 +250,7 @@ Auto-deploys workflow changes when `n8n_job_search_v1.json` is pushed to `main`.
 
 ## On-Demand Company Search Workflow (`/search`)
 
-A separate, stateless workflow (`n8n_company_search_v1.json`) for searching a specific company's openings on demand. Uses the same Telegram bot and Config sheet (read-only), but does not write to Results or dedup against previous runs.
+A separate, stateless workflow (`n8n_company_search_v1.json`) for searching a specific company's openings on demand. Uses a **separate Telegram bot** (Telegram only supports one webhook per bot) and the same Config sheet (read-only), but does not write to Results or dedup against previous runs.
 
 ### Command Format
 ```
@@ -325,7 +325,7 @@ Telegram Trigger (/search)
 | 23 | Send Results Telegram | telegram | Sends result message(s) |
 | 24 | Read Resume | googleSheets | Reads "Resume" tab (Key/Value pairs) from same sheet |
 | 25 | Prepare LLM Input | code | Builds Gemini prompt with resume + job descriptions |
-| 26 | Call Gemini Flash | httpRequest | POST to Gemini 2.0 Flash API (60s timeout, continueOnFail) |
+| 26 | Call Gemini Flash | httpRequest | POST to Gemini 2.5 Flash API (60s timeout, continueOnFail) |
 | 27 | Parse LLM Response | code | Validates & merges match scores into jobs, sorts by match % |
 | 28 | LLM Succeeded? | if | Routes: LLM worked → email, LLM failed → end |
 | 29 | Format Email | code | Builds detailed email with summary, matches, gaps per job |
@@ -365,8 +365,8 @@ Found 5 openings in Bengaluru:
 ```
 
 **Gmail (detailed — sent only when LLM succeeds):**
-Subject: `🔍 Oracle — 5 openings found (/search)`
-Body includes per-job: match %, summary, key matches, key gaps, link.
+Subject: `Oracle — 5 matches found`
+Body: Material Design HTML email with card-based layout — each job as an elevated card with clickable title link, color-coded match badge (green/yellow/red), one-line summary, blue chips for key matches, grey chips for key gaps. Gmail-safe inline styles only (no `<style>` blocks or `@media` queries).
 
 **No results:** `🔍 Jobs at Oracle (last 30 days) — No openings found in Bengaluru for this time period.`
 
@@ -381,23 +381,25 @@ New "Resume" tab in the same Google Sheet — two-column Key/Value layout:
 | Key | Value |
 |-----|-------|
 | name | Jatin Solanki |
-| title | Backend/Full-Stack Engineer |
+| title | Full-stack Software Engineer |
 | years_experience | 3.5 |
-| target_roles | SDE-II, Software Engineer, Backend Engineer |
-| skills_languages | Java, Python, JavaScript, TypeScript |
-| skills_frameworks | Spring Boot, Node.js, Express, React |
-| skills_databases | PostgreSQL, MongoDB, Redis, Elasticsearch |
-| skills_cloud | AWS (EC2, S3, Lambda, SQS), Docker, Kubernetes |
-| skills_other | System Design, Microservices, REST APIs, GraphQL, CI/CD |
-| experience_summary | (free text — key roles, achievements) |
-| education | B.Tech Computer Science, NIT, 2020 |
-| highlights | Led X, Built Y, Improved Z by N% |
+| target_roles | SDE-II, Software Engineer, Backend Engineer, Full-Stack Engineer |
+| skills_languages | Java, SQL, JavaScript, TypeScript, Bash, Groovy, C/C++ |
+| skills_frameworks | Spring Boot, Hibernate/JPA, Apache Kafka, RESTful APIs, GraphQL, OAuth2/JWT, Node.js, Angular |
+| skills_databases | Oracle, MySQL, MongoDB |
+| skills_cloud | GCP, Docker, Kubernetes, OpenShift, Helm, Jenkins, Maven |
+| skills_other | Microservices Architecture, Event-Driven Systems, Distributed Systems, Design Patterns, TDD, CI/CD Pipelines |
+| experience_summary | (free text — key roles, achievements, companies) |
+| education | B.Tech Computer Science, Manipal Institute of Technology, CGPA 9.52/10, 2022 |
+| highlights | EUR 70mn annual cost savings, Kafka migration with zero disruption, 25% CI/CD runtime reduction |
 
 ### LLM Matching (Gemini Flash)
 
-- API: `POST generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`
-- API key via `$env.GEMINI_API_KEY` (free tier from Google AI Studio)
+- API: `POST generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`
+- API key hardcoded in node URL (env var via `$env.GEMINI_API_KEY` requires `N8N_EXTERNAL_ALLOWED_ENVIRONMENT_VARIABLES` — configured but may need manual setup)
 - `responseMimeType: "application/json"` forces valid JSON output
+- `thinkingBudget: 0` to disable chain-of-thought (Gemini 2.5 Flash thinking tokens eat into output budget)
+- `maxOutputTokens: 65536` (model max)
 - `temperature: 0.1` for consistent scoring
 - Scoring: skills overlap (40%), experience fit (30%), domain relevance (20%), seniority alignment (10%)
 - Job descriptions truncated to 3000 chars each to stay within token budget
@@ -405,12 +407,14 @@ New "Resume" tab in the same Google Sheet — two-column Key/Value layout:
 
 ### Setup
 1. Import `n8n_company_search_v1.json` into n8n (separate workflow from the main one)
-2. Connect the same Google Sheets and Telegram credentials
-3. **Resume tab:** Create a "Resume" tab in the Google Sheet with Key/Value columns (referenced by name, not GID), populate with your profile
-4. **Gemini API key:** Get a free key from https://aistudio.google.com/apikey, add `GEMINI_API_KEY` to Docker compose environment, restart
-5. **Gmail:** Create Gmail OAuth2 credential in n8n (enable Gmail API + `gmail.send` scope in GCP console), update `sendTo` email in Send Gmail node
-6. Activate the workflow (requires HTTPS for Telegram webhook)
-8. Both workflows share the same Telegram bot — n8n routes `/jobs` and `/search` to their respective workflows
+2. **Telegram bot:** Create a **separate** bot via @BotFather (Telegram only supports one webhook per bot). Create a new Telegram Bot credential in n8n for this workflow.
+3. Connect Google Sheets credential (same as main workflow)
+4. **Resume tab:** Create a "Resume" tab in the Google Sheet with Key/Value columns (referenced by name, not GID), populate with your profile
+5. **Gemini API key:** Get a free key from https://aistudio.google.com/apikey, add `GEMINI_API_KEY` to Docker compose environment, restart
+6. **Gmail:** Create Gmail OAuth2 credential in n8n (enable Gmail API + `gmail.send` scope in GCP console), update `sendTo` email in Send Gmail node
+7. Activate the workflow (requires HTTPS for Telegram webhook)
+
+**Telegram bot setup:** Each workflow needs its own Telegram bot. The `/jobs` workflow uses one bot, the `/search` workflow uses another. Both bots can message the same chat (same `chatId`).
 
 ## V2 Roadmap
 - Auto resume customization
