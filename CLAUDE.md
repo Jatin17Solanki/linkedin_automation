@@ -4,7 +4,7 @@
 An n8n automation workflow (`n8n_job_search_v1.json`) that searches LinkedIn's public job pages for target companies in **Bengaluru**, filters results by experience level, logs to Google Sheets, and sends Telegram notifications. Built for Jatin's job search targeting mid-level backend/full-stack roles (3.5 years experience).
 
 ## File Locations
-- **Main workflow:** `n8n_job_search_v1.json` — scheduled job search (33 functional nodes + 5 sticky notes)
+- **Main workflow:** `n8n_job_search_v1.json` — scheduled job search with LLM resume matching (37 functional nodes + 5 sticky notes)
 - **Company search:** `n8n_company_search_v1.json` — on-demand `/search` command with LLM resume matching (30 functional nodes + 4 sticky notes)
 
 ## Architecture Overview
@@ -35,10 +35,14 @@ Schedule (7AM/7PM, 24h window)
       → YES: Append to Results sheet
       → NO: Skip, continue loop
   → Trigger Read (collapses loop output to single item)
+  → Read Resume (Google Sheet "Resume" tab — candidate profile for LLM matching)
+  → Prepare LLM Input (builds Gemini prompt with resume + job descriptions from staticData)
+  → Call Gemini Flash (POST to Gemini 2.5 Flash API, continueOnFail)
+  → Parse LLM Response (merges match scores into staticData, sorts by match %)
   → Read Unnotified (get jobs where Notified != TRUE)
-  → Format Telegram (compact template, splits long messages)
+  → Format Telegram (enriched with match % or plain fallback, splits long messages)
   → Has New Jobs? (IF node)
-    → YES: Split Messages → Send Telegram → Mark Jobs Notified → Update Notified Status
+    → YES: Split Messages → Send Telegram → Mark Jobs Notified (with Score) → Update Notified Status (with Score)
     → NO: Send No Results Telegram ("no new openings found this run")
 ```
 
@@ -109,7 +113,25 @@ Sheet Document ID: `YOUR_GOOGLE_SHEET_DOCUMENT_ID`
 
 ## Telegram Notification Format
 
-**When jobs are found (compact template):**
+**When jobs are found (LLM enriched — sorted by match %):**
+```
+🔔 3 New Openings Found
+
+1. 🟢 82% — SDE II (3-5 yrs) [SDE-II]
+   📍 Bengaluru, India
+   🔗 https://linkedin.com/jobs/view/123
+
+2. 🟡 65% — Software Engineer (3+ yrs) [Backend]
+   📍 Bengaluru, India
+   🔗 https://linkedin.com/jobs/view/456
+
+3. 🔴 38% — Cloud Engineer (5+ yrs) [Generic]
+   📍 Bengaluru, India
+   🔗 https://linkedin.com/jobs/view/789
+```
+Color coding: 🟢 ≥70%, 🟡 50-69%, 🔴 <50%
+
+**When jobs are found (LLM fallback — plain format):**
 ```
 🔔 3 New Openings Found
 
@@ -117,9 +139,7 @@ Sheet Document ID: `YOUR_GOOGLE_SHEET_DOCUMENT_ID`
    📍 Bengaluru, India
    https://linkedin.com/jobs/view/123
 
-2. Flipkart — Software Engineer (3+ yrs) [Backend]
-   📍 Bengaluru, India
-   https://linkedin.com/jobs/view/456
+⚠️ AI matching unavailable this run.
 ```
 
 **When no jobs are found:**
@@ -129,7 +149,7 @@ Sheet Document ID: `YOUR_GOOGLE_SHEET_DOCUMENT_ID`
 
 Messages exceeding Telegram's 4096 char limit are automatically split into multiple messages with `...contd` headers.
 
-## Node Reference (33 functional nodes)
+## Node Reference (37 functional nodes)
 
 | # | Node Name | Type | Purpose |
 |---|-----------|------|---------|
@@ -140,7 +160,7 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 | 5 | Parse Hours | code | Parses hours from Telegram `/jobs N` command |
 | 6 | Parse Webhook Hours | code | Parses hours from webhook query param |
 | 7 | Read Config | googleSheets | Reads Config tab (companies + buckets) |
-| 8 | Store Config | code | Saves config to workflow static data |
+| 8 | Store Config | code | Saves config to workflow static data, initializes processedJobs |
 | 9 | Read Results | googleSheets | Reads Results tab for dedup |
 | 10 | Build Search URLs | code | Builds LinkedIn search URLs per bucket |
 | 11 | Loop Over URLs | splitInBatches | Iterates over search URLs |
@@ -154,18 +174,22 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 | 19 | Skip If Dummy | if | Skips dummy items (empty run placeholder) |
 | 20 | Fetch Job Detail | httpRequest | HTTP GET individual job page |
 | 21 | Parse Job Details | html | Parses title, company, location, description |
-| 22 | Process & Filter Job | code | Experience extraction, tagging, validation |
+| 22 | Process & Filter Job | code | Experience extraction, tagging, validation, accumulates descriptions for LLM |
 | 23 | Is Valid Job? | if | Routes valid jobs to sheet, invalid back to loop |
 | 24 | Append to Results | googleSheets | Writes valid job to Results tab |
 | 25 | Trigger Read | code | Collapses loop output to single item (prevents multiplication) |
-| 26 | Read Unnotified | googleSheets | Reads Results rows where Notified != TRUE |
-| 27 | Format Telegram | code | Builds notification message, splits if too long |
-| 28 | Has New Jobs? | if | Routes to send notification or "no results" message |
-| 29 | Split Messages | code | Fans out message chunks for Telegram's 4096 char limit |
-| 30 | Send Telegram | telegram | Sends job notification message(s) |
-| 31 | Mark Jobs Notified | code | Collects job IDs to mark as notified |
-| 32 | Update Notified Status | googleSheets | Updates Notified=TRUE in Results tab |
-| 33 | Send No Results Telegram | telegram | Sends "no new openings" confirmation |
+| 26 | Read Resume | googleSheets | Reads Resume tab (Key/Value pairs) for LLM matching |
+| 27 | Prepare LLM Input | code | Builds Gemini prompt with resume + job descriptions |
+| 28 | Call Gemini Flash | httpRequest | POST to Gemini 2.5 Flash API (60s timeout, continueOnFail) |
+| 29 | Parse LLM Response | code | Validates & merges match scores into jobs, sorts by match % |
+| 30 | Read Unnotified | googleSheets | Reads Results rows where Notified != TRUE |
+| 31 | Format Telegram | code | Enriched (match %) or plain fallback, splits if too long |
+| 32 | Has New Jobs? | if | Routes to send notification or "no results" message |
+| 33 | Split Messages | code | Fans out message chunks for Telegram's 4096 char limit |
+| 34 | Send Telegram | telegram | Sends job notification message(s) |
+| 35 | Mark Jobs Notified | code | Collects job IDs + scores to mark as notified |
+| 36 | Update Notified Status | googleSheets | Updates Notified=TRUE and Score in Results tab |
+| 37 | Send No Results Telegram | telegram | Sends "no new openings" confirmation |
 
 ## Setup Guide (for new users)
 
@@ -200,7 +224,7 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 ## Design Principles
 - Config-driven: Companies and buckets read from Google Sheet, not hardcoded
 - Location-filtered: Hardcoded to Bengaluru via LinkedIn's f_PP parameter
-- Extensible: Schema supports future V2 columns (Score for LLM matching)
+- LLM-enhanced: Gemini Flash scores each job against resume; enriched Telegram with match % and color coding; Score persisted to sheet. Graceful fallback to plain format on API failure.
 - Dedup: By JobID against Results sheet before fetching job details
 - Rate limiting: Wait nodes between fetches to avoid LinkedIn throttling
 - Message splitting: Telegram messages auto-split at 4096 char limit
@@ -271,7 +295,7 @@ A separate, stateless workflow (`n8n_company_search_v1.json`) for searching a sp
 | Experience filter | Same | Same (skips >4 yrs min) |
 | Sheet writes | Appends to Results | None (stateless) |
 | Notification tracking | Marks Notified=TRUE | None |
-| LLM matching | None | Gemini Flash resume matching (match %, summary, gaps) |
+| LLM matching | Gemini Flash resume matching (match % in Telegram, Score in sheet) | Gemini Flash resume matching (match %, summary, gaps) + Gmail |
 | Email notification | None | Gmail with detailed match analysis (when LLM succeeds) |
 
 ### Architecture

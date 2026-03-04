@@ -112,7 +112,7 @@
       "typeVersion": 2,
       "position": [-100, -400],
       "parameters": {
-        "jsCode": "// Store config data in workflow static data for use by later nodes\nconst staticData = $getWorkflowStaticData('global');\n\n// Store all config rows\nstaticData.config = $input.all().map(i => i.json);\n\n// Initialize accumulators\nstaticData.newJobLinks = [];\nstaticData.existingJobIds = {};\n\nconst activeCount = staticData.config.filter(c => \n  String(c.Active).toUpperCase() === 'TRUE' || c.Active === true\n).length;\n\nconsole.log(`Config loaded: ${staticData.config.length} companies, ${activeCount} active`);\n\nreturn [{json: {configLoaded: true, totalCompanies: staticData.config.length, activeCompanies: activeCount}}];"
+        "jsCode": "// Store config data in workflow static data for use by later nodes\nconst staticData = $getWorkflowStaticData('global');\n\n// Store all config rows\nstaticData.config = $input.all().map(i => i.json);\n\n// Initialize accumulators\nstaticData.newJobLinks = [];\nstaticData.existingJobIds = {};\nstaticData.processedJobs = [];\n\nconst activeCount = staticData.config.filter(c => \n  String(c.Active).toUpperCase() === 'TRUE' || c.Active === true\n).length;\n\nconsole.log(`Config loaded: ${staticData.config.length} companies, ${activeCount} active`);\n\nreturn [{json: {configLoaded: true, totalCompanies: staticData.config.length, activeCompanies: activeCount}}];"
       }
     },
     {
@@ -358,7 +358,7 @@
       "typeVersion": 2,
       "position": [2500, -200],
       "parameters": {
-        "jsCode": "// ============================================================\n// SETTINGS\n// ============================================================\nconst MAX_EXPERIENCE_YEARS = 4;  // Skip roles where minimum experience > 4 years\n// ============================================================\n\nconst parsed = $input.first().json;\n\n// Get original search data from the loop item\nlet searchData = {};\ntry {\n  searchData = $('Loop Over Jobs').first().json || {};\n} catch(e) {\n  searchData = {};\n}\n\nconst jobId = searchData.jobId || '';\nconst bucket = searchData.bucket || '';\nconst searchTitle = searchData.searchTitle || '';\nconst searchCompany = searchData.searchCompany || '';\n\n// If parsing failed or dummy, mark as invalid\nif (!parsed.title && !searchTitle) {\n  return [{json: {valid: false, reason: 'parse_failed'}}];\n}\n\nconst title = (parsed.title || searchTitle || '').trim();\nconst company = (parsed.company || searchCompany || '').trim();\nconst location = (parsed.location || searchData.searchLocation || '').trim();\nconst description = (parsed.description || '').replace(/\\s+/g, ' ').trim();\nconst criteria = parsed.criteria || [];\n\n// ============================================================\n// EXPERIENCE EXTRACTION (regex-based, no LLM needed)\n// ============================================================\nlet expText = 'Not specified';\nlet minExp = null;\nlet maxExp = null;\n\n// Try extracting from description\nconst descLower = description.toLowerCase();\n\n// Patterns: \"3+ years\", \"3-5 years\", \"3 to 5 years\", \"minimum 3 years\", \"at least 3 years\"\nconst expPatterns = [\n  /(\\d+)\\s*\\+\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*[-–to]+\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(?:minimum|at least|min\\.?)\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*(?:years|yrs)\\s*(?:of)?\\s*(?:experience|exp)/i\n];\n\nfor (const pattern of expPatterns) {\n  const match = descLower.match(pattern);\n  if (match) {\n    minExp = parseInt(match[1]);\n    maxExp = match[2] ? parseInt(match[2]) : null;\n    expText = match[0].trim();\n    break;\n  }\n}\n\n// Also check criteria list (LinkedIn structured data)\nfor (const c of criteria) {\n  const cLower = (c || '').toLowerCase().trim();\n  // Sometimes criteria has \"Mid-Senior level\" or \"Entry level\"\n  if (cLower.includes('entry')) {\n    if (!minExp) { minExp = 0; expText = cLower; }\n  } else if (cLower.includes('mid-senior')) {\n    if (!minExp) { minExp = 3; expText = cLower; }\n  }\n}\n\n// ============================================================\n// FILTER: Skip if experience requirement > threshold\n// ============================================================\nconst skipDueToExp = minExp !== null && minExp > MAX_EXPERIENCE_YEARS;\n\nif (skipDueToExp) {\n  console.log(`Skipping ${title} at ${company}: requires ${expText} (min ${minExp} yrs > ${MAX_EXPERIENCE_YEARS})`);\n  return [{json: {valid: false, reason: 'experience_too_high', title, company, expText}}];\n}\n\n// ============================================================\n// DETERMINE PRIMARY TAG\n// ============================================================\nlet primaryTag = 'Generic';\nconst titleLower = title.toLowerCase();\nif (/sde.?(?:ii|2)/i.test(titleLower)) primaryTag = 'SDE-II';\nelse if (/software.*engineer.*(?:iii|3)/i.test(titleLower)) primaryTag = 'SE-III';\nelse if (/mts|member.*technical/i.test(titleLower)) primaryTag = 'MTS';\nelse if (/senior|sr/i.test(titleLower)) primaryTag = 'Senior';\nelse if (/backend|back.?end/i.test(titleLower)) primaryTag = 'Backend';\nelse primaryTag = 'Generic';\n\n// ============================================================\n// BUILD RESULT ROW\n// ============================================================\nconst now = new Date().toISOString();\n\nreturn [{json: {\n  valid: true,\n  JobID: jobId,\n  Title: title,\n  Company: company,\n  Location: location,\n  Link: `https://www.linkedin.com/jobs/view/${jobId}`,\n  ExperienceReq: expText,\n  PrimaryTag: primaryTag,\n  FirstSeen: now,\n  Notified: 'FALSE',\n  Score: '',\n  Status: 'New'\n}}];"
+        "jsCode": "// ============================================================\n// SETTINGS\n// ============================================================\nconst MAX_EXPERIENCE_YEARS = 4;  // Skip roles where minimum experience > 4 years\n// ============================================================\n\nconst parsed = $input.first().json;\n\n// Get original search data from the loop item\nlet searchData = {};\ntry {\n  searchData = $('Loop Over Jobs').first().json || {};\n} catch(e) {\n  searchData = {};\n}\n\nconst jobId = searchData.jobId || '';\nconst bucket = searchData.bucket || '';\nconst searchTitle = searchData.searchTitle || '';\nconst searchCompany = searchData.searchCompany || '';\n\n// If parsing failed or dummy, mark as invalid\nif (!parsed.title && !searchTitle) {\n  return [{json: {valid: false, reason: 'parse_failed'}}];\n}\n\nconst title = (parsed.title || searchTitle || '').trim();\nconst company = (parsed.company || searchCompany || '').trim();\nconst location = (parsed.location || searchData.searchLocation || '').trim();\nconst description = (parsed.description || '').replace(/\\s+/g, ' ').trim();\nconst criteria = parsed.criteria || [];\n\n// ============================================================\n// EXPERIENCE EXTRACTION (regex-based, no LLM needed)\n// ============================================================\nlet expText = 'Not specified';\nlet minExp = null;\nlet maxExp = null;\n\n// Try extracting from description\nconst descLower = description.toLowerCase();\n\n// Patterns: \"3+ years\", \"3-5 years\", \"3 to 5 years\", \"minimum 3 years\", \"at least 3 years\"\nconst expPatterns = [\n  /(\\d+)\\s*\\+\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*[-–to]+\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(?:minimum|at least|min\\.?)\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*(?:years|yrs)\\s*(?:of)?\\s*(?:experience|exp)/i\n];\n\nfor (const pattern of expPatterns) {\n  const match = descLower.match(pattern);\n  if (match) {\n    minExp = parseInt(match[1]);\n    maxExp = match[2] ? parseInt(match[2]) : null;\n    expText = match[0].trim();\n    break;\n  }\n}\n\n// Also check criteria list (LinkedIn structured data)\nfor (const c of criteria) {\n  const cLower = (c || '').toLowerCase().trim();\n  // Sometimes criteria has \"Mid-Senior level\" or \"Entry level\"\n  if (cLower.includes('entry')) {\n    if (!minExp) { minExp = 0; expText = cLower; }\n  } else if (cLower.includes('mid-senior')) {\n    if (!minExp) { minExp = 3; expText = cLower; }\n  }\n}\n\n// ============================================================\n// FILTER: Skip if experience requirement > threshold\n// ============================================================\nconst skipDueToExp = minExp !== null && minExp > MAX_EXPERIENCE_YEARS;\n\nif (skipDueToExp) {\n  console.log(`Skipping ${title} at ${company}: requires ${expText} (min ${minExp} yrs > ${MAX_EXPERIENCE_YEARS})`);\n  return [{json: {valid: false, reason: 'experience_too_high', title, company, expText}}];\n}\n\n// ============================================================\n// DETERMINE PRIMARY TAG\n// ============================================================\nlet primaryTag = 'Generic';\nconst titleLower = title.toLowerCase();\nif (/sde.?(?:ii|2)/i.test(titleLower)) primaryTag = 'SDE-II';\nelse if (/software.*engineer.*(?:iii|3)/i.test(titleLower)) primaryTag = 'SE-III';\nelse if (/mts|member.*technical/i.test(titleLower)) primaryTag = 'MTS';\nelse if (/senior|sr/i.test(titleLower)) primaryTag = 'Senior';\nelse if (/backend|back.?end/i.test(titleLower)) primaryTag = 'Backend';\nelse primaryTag = 'Generic';\n\n// ============================================================\n// ACCUMULATE FOR LLM MATCHING\n// ============================================================\nvar expDisplay = 'Not specified';\nif (minExp !== null && maxExp !== null) {\n  expDisplay = minExp + '-' + maxExp + ' yrs';\n} else if (minExp !== null) {\n  expDisplay = minExp + '+ yrs';\n}\nvar staticDataAcc = $getWorkflowStaticData('global');\nif (!staticDataAcc.processedJobs) staticDataAcc.processedJobs = [];\nstaticDataAcc.processedJobs.push({\n  jobId: jobId,\n  title: title,\n  company: company,\n  location: location,\n  link: 'https://www.linkedin.com/jobs/view/' + jobId,\n  expDisplay: expDisplay,\n  primaryTag: primaryTag,\n  description: description.substring(0, 3000)\n});\n\n// ============================================================\n// BUILD RESULT ROW\n// ============================================================\nconst now = new Date().toISOString();\n\nreturn [{json: {\n  valid: true,\n  JobID: jobId,\n  Title: title,\n  Company: company,\n  Location: location,\n  Link: 'https://www.linkedin.com/jobs/view/' + jobId,\n  ExperienceReq: expText,\n  PrimaryTag: primaryTag,\n  FirstSeen: now,\n  Notified: 'FALSE',\n  Score: '',\n  Status: 'New'\n}}];"
       }
     },
     {
@@ -467,7 +467,7 @@
       "name": "Read Unnotified",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.6,
-      "position": [1900, -800],
+      "position": [3100, -800],
       "parameters": {
         "options": {
           "returnAllMatches": true
@@ -507,9 +507,9 @@
       "name": "Format Telegram",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2200, -800],
+      "position": [3400, -800],
       "parameters": {
-        "jsCode": "const items = $input.all();\n\n// Filter out items that don't look like job results\nconst jobs = items.filter(i => i.json.JobID && i.json.Title && i.json.Notified === false);\n\nif (jobs.length === 0) {\n  return [{json: {hasJobs: false, message: 'No new jobs to notify', jobIds: []}}];\n}\n\n// Build individual job entries\nconst entries = [];\nfor (let i = 0; i < jobs.length; i++) {\n  const j = jobs[i].json;\n  const num = i + 1;\n  const exp = j.ExperienceReq && j.ExperienceReq !== 'Not specified' ? ` (${j.ExperienceReq})` : '';\n  const tag = j.PrimaryTag ? ` [${j.PrimaryTag}]` : '';\n  let entry = `${num}. ${j.Company} \\u2014 ${j.Title}${exp}${tag}\\n`;\n  entry += `   \\u{1F4CD} ${j.Location || 'N/A'}\\n`;\n  entry += `   ${j.Link}`;\n  entries.push(entry);\n}\n\n// Split into multiple messages to stay under Telegram 4096 char limit\nconst MAX_LEN = 4000;\nconst messages = [];\nconst header = `\\u{1F514} ${jobs.length} New Opening${jobs.length > 1 ? 's' : ''} Found\\n\\n`;\nlet current = header;\n\nfor (const entry of entries) {\n  if (current.length + entry.length + 2 > MAX_LEN) {\n    messages.push(current.trim());\n    current = '...contd\\n\\n';\n  }\n  current += entry + '\\n\\n';\n}\nif (current.trim()) messages.push(current.trim());\n\n// Collect job IDs for marking as notified\nconst jobIds = jobs.map(j => j.json.JobID);\n\nreturn [{json: {\n  hasJobs: true,\n  messages: messages,\n  message: messages[0],\n  jobIds: jobIds,\n  count: jobs.length\n}}];"
+        "jsCode": "var staticData = $getWorkflowStaticData('global');\nvar items = $input.all();\nvar llmFailed = staticData.llmFailed === true;\nvar processedJobs = staticData.processedJobs || [];\n\n// Filter to real job results\nvar jobs = items.filter(function(i) { return i.json.JobID && i.json.Title && i.json.Notified === false; });\n\nif (jobs.length === 0) {\n  return [{json: {hasJobs: false, message: 'No new jobs to notify', jobIds: [], scores: {}}}];\n}\n\n// Build score lookup from LLM results\nvar scoreMap = {};\nif (!llmFailed && processedJobs.length > 0) {\n  for (var p = 0; p < processedJobs.length; p++) {\n    var pj = processedJobs[p];\n    if (pj.jobId && pj.matchPercentage != null) {\n      scoreMap[pj.jobId] = pj.matchPercentage;\n    }\n  }\n}\nvar hasScores = !llmFailed && Object.keys(scoreMap).length > 0;\n\n// Merge jobs with scores\nvar jobList = [];\nfor (var k = 0; k < jobs.length; k++) {\n  var j = jobs[k].json;\n  var score = scoreMap[String(j.JobID)];\n  jobList.push({\n    JobID: j.JobID,\n    Title: j.Title,\n    Company: j.Company,\n    Location: j.Location,\n    Link: j.Link,\n    ExperienceReq: j.ExperienceReq,\n    PrimaryTag: j.PrimaryTag,\n    matchPercentage: typeof score === 'number' ? score : null\n  });\n}\n\n// Sort by match % if scores available\nif (hasScores) {\n  jobList.sort(function(a, b) {\n    var aP = a.matchPercentage != null ? a.matchPercentage : -1;\n    var bP = b.matchPercentage != null ? b.matchPercentage : -1;\n    return bP - aP;\n  });\n}\n\nvar MAX_LEN = 4000;\nvar messages = [];\nvar entries = [];\n\nif (hasScores) {\n  // ENRICHED format with match %\n  var header = '\\uD83D\\uDD14 ' + jobList.length + ' New Opening' + (jobList.length > 1 ? 's' : '') + ' Found\\n\\n';\n  for (var i = 0; i < jobList.length; i++) {\n    var jb = jobList[i];\n    var pct = jb.matchPercentage;\n    var icon = '\\uD83D\\uDD34';\n    if (typeof pct === 'number') {\n      if (pct >= 70) icon = '\\uD83D\\uDFE2';\n      else if (pct >= 50) icon = '\\uD83D\\uDFE1';\n    }\n    var pctStr = typeof pct === 'number' ? pct + '%' : 'N/A';\n    var exp = jb.ExperienceReq && jb.ExperienceReq !== 'Not specified' ? ' (' + jb.ExperienceReq + ')' : '';\n    var tag = jb.PrimaryTag ? ' [' + jb.PrimaryTag + ']' : '';\n    var entry = (i+1) + '. ' + icon + ' ' + pctStr + ' \\u2014 ' + jb.Company + ' \\u2014 ' + jb.Title + exp + tag + '\\n';\n    entry += '   \\uD83D\\uDCCD ' + (jb.Location || 'N/A') + '\\n';\n    entry += '   \\uD83D\\uDD17 ' + jb.Link;\n    entries.push(entry);\n  }\n  var current = header;\n  for (var m = 0; m < entries.length; m++) {\n    if (current.length + entries[m].length + 2 > MAX_LEN) {\n      messages.push(current.trim());\n      current = '...contd\\n\\n';\n    }\n    current += entries[m] + '\\n\\n';\n  }\n  if (current.trim()) messages.push(current.trim());\n} else {\n  // FALLBACK: plain format (no scores)\n  var header2 = '\\uD83D\\uDD14 ' + jobList.length + ' New Opening' + (jobList.length > 1 ? 's' : '') + ' Found\\n\\n';\n  for (var i2 = 0; i2 < jobList.length; i2++) {\n    var jb2 = jobList[i2];\n    var exp2 = jb2.ExperienceReq && jb2.ExperienceReq !== 'Not specified' ? ' (' + jb2.ExperienceReq + ')' : '';\n    var tag2 = jb2.PrimaryTag ? ' [' + jb2.PrimaryTag + ']' : '';\n    var entry2 = (i2+1) + '. ' + jb2.Company + ' \\u2014 ' + jb2.Title + exp2 + tag2 + '\\n';\n    entry2 += '   \\uD83D\\uDCCD ' + (jb2.Location || 'N/A') + '\\n';\n    entry2 += '   ' + jb2.Link;\n    entries.push(entry2);\n  }\n  var current2 = header2;\n  for (var m2 = 0; m2 < entries.length; m2++) {\n    if (current2.length + entries[m2].length + 2 > MAX_LEN) {\n      messages.push(current2.trim());\n      current2 = '...contd\\n\\n';\n    }\n    current2 += entries[m2] + '\\n\\n';\n  }\n  if (current2.trim()) messages.push(current2.trim());\n  if (llmFailed && messages.length > 0) {\n    messages[messages.length - 1] += '\\n\\n\\u26A0\\uFE0F AI matching unavailable this run.';\n  }\n}\n\n// Build scores dict for downstream Score persistence\nvar scores = {};\nfor (var s = 0; s < jobList.length; s++) {\n  if (jobList[s].matchPercentage != null) {\n    scores[jobList[s].JobID] = jobList[s].matchPercentage;\n  }\n}\n\nvar jobIds = jobList.map(function(x) { return x.JobID; });\n\nreturn [{json: {\n  hasJobs: true,\n  messages: messages,\n  message: messages[0],\n  jobIds: jobIds,\n  count: jobList.length,\n  scores: scores,\n  llmFailed: llmFailed\n}}];"
       }
     },
     {
@@ -517,7 +517,7 @@
       "name": "Has New Jobs?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [2500, -800],
+      "position": [3700, -800],
       "parameters": {
         "options": {},
         "conditions": {
@@ -547,7 +547,7 @@
       "name": "Split Messages",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2800, -900],
+      "position": [4000, -900],
       "parameters": {
         "jsCode": "const data = $input.first().json;\nconst messages = data.messages || [data.message];\nconst jobIds = data.jobIds || [];\n\nreturn messages.map((msg, i) => ({\n  json: {\n    message: msg,\n    jobIds: i === messages.length - 1 ? jobIds : []\n  }\n}));"
       }
@@ -557,7 +557,7 @@
       "name": "Send Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [3100, -900],
+      "position": [4300, -900],
       "parameters": {
         "chatId": "CONFIGURE_ME",
         "text": "={{ $json.message }}",
@@ -577,9 +577,9 @@
       "name": "Mark Jobs Notified",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3400, -900],
+      "position": [4600, -900],
       "parameters": {
-        "jsCode": "// Get jobIds from Format Telegram node (Send Telegram overwrites json with API response)\nlet allIds = [];\ntry {\n  const formatData = $('Format Telegram').first().json;\n  allIds = formatData.jobIds || [];\n} catch(e) {\n  // Fallback: try from input\n  for (const item of $input.all()) {\n    const ids = item.json.jobIds || [];\n    allIds.push(...ids);\n  }\n}\n\nif (allIds.length === 0) {\n  return [{json: {nothing: true}}];\n}\n\nreturn allIds.map(id => ({\n  json: {\n    JobID: id,\n    Notified: 'TRUE'\n  }\n}));"
+        "jsCode": "// Get jobIds and scores from Format Telegram node (Send Telegram overwrites json with API response)\nvar allIds = [];\nvar scores = {};\ntry {\n  var formatData = $('Format Telegram').first().json;\n  allIds = formatData.jobIds || [];\n  scores = formatData.scores || {};\n} catch(e) {\n  // Fallback: try from input\n  var inputItems = $input.all();\n  for (var i = 0; i < inputItems.length; i++) {\n    var ids = inputItems[i].json.jobIds || [];\n    for (var k = 0; k < ids.length; k++) { allIds.push(ids[k]); }\n  }\n}\n\nif (allIds.length === 0) {\n  return [{json: {nothing: true}}];\n}\n\n// Clean up staticData\nvar staticData = $getWorkflowStaticData('global');\ndelete staticData.processedJobs;\ndelete staticData.llmFailed;\n\nreturn allIds.map(function(id) {\n  var scoreVal = scores[id];\n  return {\n    json: {\n      JobID: id,\n      Notified: 'TRUE',\n      Score: typeof scoreVal === 'number' ? String(scoreVal) : ''\n    }\n  };\n});"
       }
     },
     {
@@ -587,12 +587,13 @@
       "name": "Update Notified Status",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.6,
-      "position": [3700, -900],
+      "position": [4900, -900],
       "parameters": {
         "columns": {
           "value": {
             "JobID": "={{ $json.JobID }}",
-            "Notified": "={{ $json.Notified }}"
+            "Notified": "={{ $json.Notified }}",
+            "Score": "={{ $json.Score }}"
           },
           "schema": [
             {"id": "JobID", "type": "string", "display": true, "required": false, "displayName": "JobID", "defaultMatch": true, "canBeUsedToMatch": true},
@@ -640,7 +641,7 @@
       "name": "Send No Results Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [2800, -700],
+      "position": [4000, -700],
       "parameters": {
         "chatId": "CONFIGURE_ME",
         "text": "\u2705 Job search ran successfully — no new openings found this run.",
@@ -717,7 +718,75 @@
         "width": 900,
         "height": 200,
         "color": 3,
-        "content": "## Notification Chain\nAfter all processing: read Results where Notified=FALSE → format batched Telegram message → send → mark as notified.\nHandles leftover unnotified jobs from previous failed runs too."
+        "content": "## Notification & LLM Pipeline\nAfter job processing: Read Resume → Prepare LLM Input → Call Gemini Flash → Parse LLM Response → Read Unnotified → Format Telegram (enriched with match % or plain fallback) → send → mark as notified with Score.\nHandles leftover unnotified jobs from previous failed runs too. LLM failure falls back gracefully to plain format.",
+        "width": 3200
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000035",
+      "name": "Read Resume",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [1900, -800],
+      "parameters": {
+        "options": {},
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Resume",
+          "cachedResultName": "Resume"
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "n8n Test Claude"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURE_ME",
+          "name": "Google Sheets account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000036",
+      "name": "Prepare LLM Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, -800],
+      "parameters": {
+        "jsCode": "var staticData = $getWorkflowStaticData('global');\nvar resumeRows = $input.all().map(function(i) { return i.json; });\nvar jobs = staticData.processedJobs || [];\n\n// Build resume object from key-value rows\nvar resume = {};\nfor (var r = 0; r < resumeRows.length; r++) {\n  var key = String(resumeRows[r].Key || '').trim();\n  var value = String(resumeRows[r].Value || '').trim();\n  if (key) resume[key] = value;\n}\n\n// Check if resume data is available\nif (Object.keys(resume).length === 0 || !resume.name) {\n  console.log('Resume tab is empty or missing — skipping LLM matching');\n  staticData.llmFailed = true;\n  return [{json: {llmRequired: false, reason: 'resume_empty'}}];\n}\n\nif (jobs.length === 0) {\n  console.log('No jobs to match — skipping LLM');\n  staticData.llmFailed = true;\n  return [{json: {llmRequired: false, reason: 'no_jobs'}}];\n}\n\n// Build jobs array for LLM (truncate descriptions)\nvar jobsForLLM = jobs.map(function(j) {\n  return {\n    jobId: j.jobId,\n    title: j.title,\n    company: j.company,\n    location: j.location,\n    description: (j.description || '').substring(0, 3000),\n    experienceReq: j.expDisplay,\n    primaryTag: j.primaryTag\n  };\n});\n\nvar prompt = 'You are a job-resume matching assistant. Given a candidate\\'s resume and a list of job postings, analyze how well the candidate matches each role.\\n\\n'\n  + '## Candidate Resume\\n' + JSON.stringify(resume, null, 2) + '\\n\\n'\n  + '## Job Listings\\n' + JSON.stringify(jobsForLLM, null, 2) + '\\n\\n'\n  + '## Instructions\\nFor each job in the jobs array:\\n'\n  + '1. Compare the job requirements against the candidate\\'s resume\\n'\n  + '2. Calculate an honest match percentage based on: skills overlap (40%), experience level fit (30%), domain relevance (20%), and role seniority alignment (10%)\\n'\n  + '3. Write a one-line summary of what the role involves (max 100 characters)\\n'\n  + '4. List 2-4 key skills/experiences from the resume that match the job requirements\\n'\n  + '5. List 1-3 key skills/requirements the candidate is missing or weak on\\n\\n'\n  + '## Scoring Guidelines\\n'\n  + '- 85-100%: Excellent match — skills, experience level, and domain align closely\\n'\n  + '- 70-84%: Strong match — most key requirements met, minor gaps\\n'\n  + '- 50-69%: Moderate match — relevant foundation but notable gaps\\n'\n  + '- 30-49%: Weak match — limited overlap, significant upskilling needed\\n'\n  + '- 0-29%: Poor match — fundamentally different domain or seniority\\n\\n'\n  + '## Output Format\\nReturn ONLY a valid JSON object. No markdown, no explanation, no text before or after.\\n'\n  + '{\\n  \"results\": [\\n    {\\n      \"jobId\": \"<same jobId from input>\",\\n      \"matchPercentage\": <integer 0-100>,\\n      \"summary\": \"<what the role does, max 100 chars>\",\\n      \"keyMatches\": [\"<matching skill>\", \"<matching skill>\"],\\n      \"keyGaps\": [\"<missing requirement>\", \"<missing requirement>\"]\\n    }\\n  ]\\n}\\n\\n'\n  + 'RULES:\\n'\n  + '- Return results for ALL jobs in the input, in the same order\\n'\n  + '- Each jobId MUST match a jobId from the input exactly\\n'\n  + '- matchPercentage MUST be an integer between 0 and 100\\n'\n  + '- summary MUST be under 100 characters\\n'\n  + '- keyMatches: 2-4 items\\n'\n  + '- keyGaps: 1-3 items\\n'\n  + '- Do NOT fabricate skills the candidate doesn\\'t have\\n'\n  + '- Do NOT add any text outside the JSON object';\n\nconsole.log('Prepared LLM input: ' + jobs.length + ' jobs, resume keys: ' + Object.keys(resume).join(', '));\n\nreturn [{json: {\n  llmRequired: true,\n  prompt: prompt,\n  jobCount: jobs.length\n}}];"
+      }
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000037",
+      "name": "Call Gemini Flash",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2500, -800],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{ $env.GEMINI_API_KEY }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1, maxOutputTokens: 65536, thinkingConfig: { thinkingBudget: 0 } } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "a1000001-0001-0001-0001-000000000038",
+      "name": "Parse LLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2800, -800],
+      "parameters": {
+        "jsCode": "var staticData = $getWorkflowStaticData('global');\nvar jobs = staticData.processedJobs || [];\nvar response = $input.first().json;\n\n// Check if LLM was skipped\nif (response.llmRequired === false) {\n  console.log('LLM was skipped: ' + (response.reason || 'unknown'));\n  staticData.llmFailed = true;\n  return [{json: {llmFailed: true, reason: response.reason}}];\n}\n\ntry {\n  // Check for API error\n  if (response.error || !response.candidates || !response.candidates[0]) {\n    var errMsg = response.error ? response.error.message : 'No candidates in response';\n    console.log('Gemini API error: ' + errMsg);\n    staticData.llmFailed = true;\n    return [{json: {llmFailed: true, reason: 'api_error', error: errMsg}}];\n  }\n\n  var text = '';\n  try {\n    text = response.candidates[0].content.parts[0].text || '';\n  } catch(e) {\n    text = '';\n  }\n  if (!text) {\n    console.log('Empty response text from Gemini');\n    staticData.llmFailed = true;\n    return [{json: {llmFailed: true, reason: 'empty_response'}}];\n  }\n\n  // Parse JSON response\n  var parsed = JSON.parse(text);\n  var results = parsed.results || [];\n\n  if (!Array.isArray(results) || results.length === 0) {\n    console.log('No results array in LLM response');\n    staticData.llmFailed = true;\n    return [{json: {llmFailed: true, reason: 'no_results_array'}}];\n  }\n\n  // Build lookup by jobId\n  var resultMap = {};\n  for (var r = 0; r < results.length; r++) {\n    if (results[r].jobId) resultMap[results[r].jobId] = results[r];\n  }\n\n  // Merge LLM results into processedJobs\n  for (var j = 0; j < jobs.length; j++) {\n    var match = resultMap[jobs[j].jobId];\n    if (match) {\n      jobs[j].matchPercentage = typeof match.matchPercentage === 'number' ?\n        Math.max(0, Math.min(100, Math.round(match.matchPercentage))) : null;\n      jobs[j].summary = (match.summary || '').substring(0, 100);\n      jobs[j].keyMatches = Array.isArray(match.keyMatches) ? match.keyMatches.slice(0, 4) : [];\n      jobs[j].keyGaps = Array.isArray(match.keyGaps) ? match.keyGaps.slice(0, 3) : [];\n    } else {\n      jobs[j].matchPercentage = null;\n      jobs[j].summary = '';\n      jobs[j].keyMatches = [];\n      jobs[j].keyGaps = [];\n    }\n  }\n\n  // Sort by matchPercentage descending (nulls at end)\n  jobs.sort(function(a, b) {\n    var aP = a.matchPercentage != null ? a.matchPercentage : -1;\n    var bP = b.matchPercentage != null ? b.matchPercentage : -1;\n    return bP - aP;\n  });\n\n  staticData.processedJobs = jobs;\n  staticData.llmFailed = false;\n\n  console.log('LLM matching complete: ' + results.length + ' results merged into ' + jobs.length + ' jobs');\n  return [{json: {llmFailed: false, matchedCount: results.length, jobCount: jobs.length}}];\n\n} catch (e) {\n  console.log('LLM response parse error: ' + e.message);\n  staticData.llmFailed = true;\n  return [{json: {llmFailed: true, reason: 'parse_error', error: e.message}}];\n}"
       }
     }
   ],
@@ -810,6 +879,26 @@
       ]
     },
     "Trigger Read": {
+      "main": [
+        [{"node": "Read Resume", "type": "main", "index": 0}]
+      ]
+    },
+    "Read Resume": {
+      "main": [
+        [{"node": "Prepare LLM Input", "type": "main", "index": 0}]
+      ]
+    },
+    "Prepare LLM Input": {
+      "main": [
+        [{"node": "Call Gemini Flash", "type": "main", "index": 0}]
+      ]
+    },
+    "Call Gemini Flash": {
+      "main": [
+        [{"node": "Parse LLM Response", "type": "main", "index": 0}]
+      ]
+    },
+    "Parse LLM Response": {
       "main": [
         [{"node": "Read Unnotified", "type": "main", "index": 0}]
       ]
