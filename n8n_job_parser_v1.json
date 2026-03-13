@@ -1,0 +1,201 @@
+{
+  "name": "LinkedIn Job Parser",
+  "nodes": [
+    {
+      "id": "c3000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-200, 0],
+      "webhookId": "parse-job",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "parse-job",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "c3000001-0001-0001-0001-000000000002",
+      "name": "Parse URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [100, 0],
+      "parameters": {
+        "jsCode": "var body = $input.first().json.body || {};\nvar url = body.url || '';\n\n// Also check direct json properties and query params\nif (!url) url = $input.first().json.url || '';\nif (!url && $input.first().json.query) url = $input.first().json.query.url || '';\n\nurl = String(url).trim();\n\nif (!url) {\n  return [{json: {\n    valid: false,\n    success: false,\n    error: 'Missing required parameter: url',\n    job_id: ''\n  }}];\n}\n\n// Extract job ID from LinkedIn URL\n// Handles: /jobs/view/12345, /jobs/view/title-slug-12345, /jobs/view/12345?params\nvar jobIdMatch = url.match(/linkedin\\.com\\/jobs\\/view\\/(?:[^\\/?]*[-\\/])?(\\d{8,})/);\nif (!jobIdMatch) {\n  jobIdMatch = url.match(/linkedin\\.com\\/jobs\\/view\\/(\\d+)/);\n}\n\nif (!jobIdMatch) {\n  return [{json: {\n    valid: false,\n    success: false,\n    error: 'Invalid LinkedIn job URL. Expected format: https://linkedin.com/jobs/view/<job-id>',\n    job_id: ''\n  }}];\n}\n\nvar jobId = jobIdMatch[1];\nvar normalizedUrl = 'https://www.linkedin.com/jobs/view/' + jobId;\n\nconsole.log('Parsing job: ' + jobId);\n\nreturn [{json: {valid: true, url: normalizedUrl, jobId: jobId}}];"
+      }
+    },
+    {
+      "id": "c3000001-0001-0001-0001-000000000003",
+      "name": "Valid URL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [400, 0],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-valid-url",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "c3000001-0001-0001-0001-000000000004",
+      "name": "Fetch Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, -100],
+      "parameters": {
+        "url": "={{ $('Parse URL').first().json.url }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "c3000001-0001-0001-0001-000000000005",
+      "name": "Parse HTML",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [1000, -100],
+      "parameters": {
+        "options": {},
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "title",
+              "cssSelector": "div h1"
+            },
+            {
+              "key": "company",
+              "cssSelector": "div span a"
+            },
+            {
+              "key": "location",
+              "cssSelector": "div span[class*='topcard__flavor topcard__flavor--bullet']"
+            },
+            {
+              "key": "description",
+              "cssSelector": "div.description__text.description__text--rich"
+            },
+            {
+              "key": "criteria",
+              "cssSelector": "ul.description__job-criteria-list li span.description__job-criteria-text",
+              "returnArray": true,
+              "returnValue": "text"
+            },
+            {
+              "key": "applyHtml",
+              "cssSelector": "a[class*='apply']",
+              "returnValue": "html"
+            }
+          ]
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "c3000001-0001-0001-0001-000000000006",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, -100],
+      "parameters": {
+        "jsCode": "var parsed = $input.first().json;\nvar urlData = $('Parse URL').first().json;\nvar jobId = urlData.jobId || '';\nvar sourceUrl = 'https://www.linkedin.com/jobs/view/' + jobId;\n\n// Check if fetch/parse failed\nif (!parsed.title && !parsed.description) {\n  return [{json: {\n    success: false,\n    error: 'Failed to fetch or parse job page. LinkedIn may have blocked the request or the URL may be invalid.',\n    job_id: jobId,\n    source_url: sourceUrl\n  }}];\n}\n\nvar title = (parsed.title || '').trim();\nvar company = (parsed.company || '').trim();\nvar location = (parsed.location || '').trim();\nvar description = (parsed.description || '').replace(/\\s+/g, ' ').trim();\nvar criteria = parsed.criteria || [];\nvar applyHtml = (parsed.applyHtml || '');\n\n// Extract apply URL from HTML element\nvar applyUrl = '';\nvar hrefMatch = applyHtml.match(/href=[\"']([^\"']+)[\"']/);\nif (hrefMatch) {\n  applyUrl = hrefMatch[1];\n}\n\n// Extract seniority from criteria\nvar seniorityLevel = '';\nfor (var i = 0; i < criteria.length; i++) {\n  var c = (criteria[i] || '').toLowerCase().trim();\n  if (c.includes('level') || c.includes('entry') || c.includes('senior') || c.includes('associate') || c.includes('director')) {\n    seniorityLevel = (criteria[i] || '').trim();\n    break;\n  }\n}\n\n// Extract experience from description\nvar expText = 'Not specified';\nvar descLower = description.toLowerCase();\nvar expPatterns = [\n  /(\\d+)\\s*\\+\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*[-\\u2013to]+\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(?:minimum|at least|min\\.?)\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*(?:years|yrs)\\s*(?:of)?\\s*(?:experience|exp)/i\n];\nfor (var p = 0; p < expPatterns.length; p++) {\n  var match = descLower.match(expPatterns[p]);\n  if (match) {\n    expText = match[0].trim();\n    break;\n  }\n}\n\nconsole.log('Parsed: ' + title + ' at ' + company);\n\nreturn [{json: {\n  success: true,\n  job_id: jobId,\n  title: title,\n  company: company,\n  location: location,\n  job_description: description,\n  apply_url: applyUrl,\n  experience: expText,\n  seniority_level: seniorityLevel,\n  criteria: criteria,\n  source_url: sourceUrl\n}}];"
+      }
+    },
+    {
+      "id": "c3000001-0001-0001-0001-000000000007",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1600, -100],
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {}
+      }
+    },
+    {
+      "id": "c3000001-0001-0001-0001-000000000008",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [700, 200],
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {}
+      }
+    },
+    {
+      "id": "sticky-jp-01",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-280, -200],
+      "parameters": {
+        "width": 2100,
+        "height": 140,
+        "color": 4,
+        "content": "## LinkedIn Job Parser — MCP Tool Webhook\n\n**POST** `/webhook/parse-job` with `{\"url\": \"https://linkedin.com/jobs/view/12345\"}` → returns structured JSON with job description, apply URL, company, experience, etc. Designed as an MCP tool for Claude.ai."
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{"node": "Parse URL", "type": "main", "index": 0}]
+      ]
+    },
+    "Parse URL": {
+      "main": [
+        [{"node": "Valid URL?", "type": "main", "index": 0}]
+      ]
+    },
+    "Valid URL?": {
+      "main": [
+        [{"node": "Fetch Page", "type": "main", "index": 0}],
+        [{"node": "Respond Error", "type": "main", "index": 0}]
+      ]
+    },
+    "Fetch Page": {
+      "main": [
+        [{"node": "Parse HTML", "type": "main", "index": 0}]
+      ]
+    },
+    "Parse HTML": {
+      "main": [
+        [{"node": "Build Response", "type": "main", "index": 0}]
+      ]
+    },
+    "Build Response": {
+      "main": [
+        [{"node": "Respond Success", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0
+}
