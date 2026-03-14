@@ -6,6 +6,7 @@ An n8n automation workflow (`n8n_job_search_v1.json`) that searches LinkedIn's p
 ## File Locations
 - **Main workflow:** `n8n_job_search_v1.json` — scheduled job search with LLM resume matching (37 functional nodes + 5 sticky notes)
 - **Company search:** `n8n_company_search_v1.json` — on-demand `/search` command with LLM resume matching (30 functional nodes + 4 sticky notes)
+- **Job parser:** `n8n_job_parser_v1.json` — webhook API for parsing LinkedIn job pages (8 functional nodes + 1 sticky note)
 
 ## Architecture Overview
 
@@ -439,6 +440,77 @@ New "Resume" tab in the same Google Sheet — two-column Key/Value layout:
 7. Activate the workflow (requires HTTPS for Telegram webhook)
 
 **Telegram bot setup:** Each workflow needs its own Telegram bot. The `/jobs` workflow uses one bot, the `/search` workflow uses another. Both bots can message the same chat (same `chatId`).
+
+## Job Parser Webhook (`/parse-job`)
+
+A stateless webhook that accepts a LinkedIn job URL and returns structured JSON with the parsed job details. Designed as an MCP tool backend for Claude.ai.
+
+### Endpoint
+```
+POST https://<host>/webhook/parse-job
+Body: {"url": "https://linkedin.com/jobs/view/4370408479"}
+```
+
+### Response (success)
+```json
+{
+  "success": true,
+  "job_id": "4370408479",
+  "title": "Software Engineer II",
+  "company": "Amazon",
+  "location": "Bengaluru, India",
+  "job_description": "Full text of the job description...",
+  "apply_url": "https://company.com/careers/...",
+  "experience": "3-5 years",
+  "seniority_level": "Mid-Senior level",
+  "criteria": ["Full-time", "Mid-Senior level", "Information Technology"],
+  "source_url": "https://www.linkedin.com/jobs/view/4370408479"
+}
+```
+
+### Response (error)
+```json
+{
+  "success": false,
+  "error": "Failed to fetch or parse job page.",
+  "job_id": "4370408479",
+  "source_url": "https://www.linkedin.com/jobs/view/4370408479"
+}
+```
+
+### Architecture
+```
+Webhook (POST /parse-job, responseMode: responseNode)
+  → Parse URL (Code — validate LinkedIn URL, extract job ID)
+  → Valid URL? (IF)
+    ├─ YES → Fetch Page (HTTP GET, 30s timeout, continueOnFail)
+    │        → Parse HTML (same CSS selectors as main workflow + apply link)
+    │        → Build Response (Code — clean text, extract apply URL, format JSON)
+    │        → Respond Success (respondToWebhook)
+    └─ NO → Respond Error (respondToWebhook)
+```
+
+### Node Reference (8 functional nodes + 1 sticky note)
+
+| # | Node Name | Type | Purpose |
+|---|-----------|------|---------|
+| 1 | Webhook | webhook | POST /parse-job, waits for Respond node |
+| 2 | Parse URL | code | Validates LinkedIn URL, extracts job ID |
+| 3 | Valid URL? | if | Routes valid/invalid URLs |
+| 4 | Fetch Page | httpRequest | HTTP GET LinkedIn job page, 30s timeout |
+| 5 | Parse HTML | html | Extracts title, company, location, description, criteria, apply link |
+| 6 | Build Response | code | Cleans text, extracts apply URL, formats structured JSON |
+| 7 | Respond Success | respondToWebhook | Returns parsed job data |
+| 8 | Respond Error | respondToWebhook | Returns error JSON for invalid URLs |
+
+### Setup
+1. Import `n8n_job_parser_v1.json` into n8n
+2. Activate the workflow (webhook requires activation)
+3. No credentials needed — uses public LinkedIn pages only
+4. Test: `curl -X POST https://<host>/webhook/parse-job -H "Content-Type: application/json" -d '{"url": "https://linkedin.com/jobs/view/12345"}'`
+
+### MCP Tool Configuration
+Configure in your MCP server to expose this webhook as a tool for Claude.ai. The tool accepts a `url` parameter and returns the structured job data.
 
 ## V2 Roadmap
 - Auto resume customization
