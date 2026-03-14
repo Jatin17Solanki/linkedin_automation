@@ -7,3 +7,6 @@ n8n_data/
 Jatin_Solanki_Resume.pdf
 .claude/
 attachments/
+
+# Node modules
+node_modules/
