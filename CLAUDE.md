@@ -509,8 +509,37 @@ Webhook (POST /parse-job, responseMode: responseNode)
 3. No credentials needed — uses public LinkedIn pages only
 4. Test: `curl -X POST https://<host>/webhook/parse-job -H "Content-Type: application/json" -d '{"url": "https://linkedin.com/jobs/view/12345"}'`
 
-### MCP Tool Configuration
-Configure in your MCP server to expose this webhook as a tool for Claude.ai. The tool accepts a `url` parameter and returns the structured job data.
+### MCP Server (`mcp-server/`)
+
+A lightweight Node.js MCP server that exposes the job parser webhook as a tool for Claude.ai (or any MCP-compatible client).
+
+**Files:**
+| File | Purpose |
+|------|---------|
+| `mcp-server/index.js` | MCP server — registers `parse-linkedin-job` tool, calls the n8n webhook |
+| `mcp-server/package.json` | Dependencies (`@modelcontextprotocol/sdk`) |
+
+**Tool:** `parse-linkedin-job`
+- **Input:** `url` (string) — LinkedIn job URL
+- **Output:** Formatted text with title, company, location, experience, seniority, apply URL, and full job description
+- **Backend:** POST to `https://<VM_IP>.nip.io/webhook/parse-job`
+
+**Claude Desktop config** (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "linkedin-job-parser": {
+      "command": "node",
+      "args": ["<path-to>/mcp-server/index.js"]
+    }
+  }
+}
+```
+
+**Setup:**
+1. `cd mcp-server && npm install`
+2. Add the config above to Claude Desktop settings (Developer > Edit Config)
+3. Restart Claude Desktop — the `parse-linkedin-job` tool appears automatically
 
 ## V2 Roadmap
 - Auto resume customization
