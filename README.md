@@ -18,6 +18,8 @@ Google Sheet (companies)          Telegram
   Google Sheet (results + scores)
 ```
 
+[View detailed architecture →](https://jatin17solanki.github.io/linkedin_automation/)
+
 **Three workflows:**
 
 | Workflow | Trigger | Purpose |
