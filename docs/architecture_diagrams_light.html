@@ -1,20 +1,38 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta charset="utf-8">
+  <meta charset="utf-8">
 
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&display=swap');
+  <style>
+    @font-face {
+      font-family: 'Caveat';
+      src: url('Caveat-Regular.ttf') format('truetype');
+      font-weight: 400;
+      font-style: normal;
+    }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: #fafaf8;
-    color: #2d2d2d;
-    font-family: 'Caveat', cursive;
-    padding: 32px 24px;
-  }
+    @font-face {
+      font-family: 'Caveat';
+      src: url('Caveat-Bold.ttf') format('truetype');
+      font-weight: 700;
+      font-style: normal;
+    }
 
-  /* JARK-inspired pastel palette:
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: #fafaf8;
+      color: #2d2d2d;
+      font-family: 'Caveat', cursive;
+      padding: 32px 24px;
+    }
+
+    /* JARK-inspired pastel palette:
      Phase 1 (notification) → soft blue   #dbeafe / #3b82f6
      Phase 2 (filtration)   → soft purple #ede9fe / #7c3aed
      Phase 3 (application)  → soft orange #ffedd5 / #ea580c
@@ -24,363 +42,512 @@
      Neutral/triggers       → warm gray   #f5f5f0 / #6b7280
   */
 
-  .section-label {
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #9ca3af;
-    margin-bottom: 8px;
-  }
-  .diagram-title {
-    font-size: 22px;
-    font-weight: 700;
-    color: #1c1c1c;
-    margin-bottom: 4px;
-  }
-  .diagram-subtitle {
-    font-size: 15px;
-    color: #6b7280;
-    margin-bottom: 20px;
-    line-height: 1.5;
-  }
-  .diagram-wrap { margin-bottom: 56px; }
-  svg { display: block; width: 100%; }
+    .section-label {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #9ca3af;
+      margin-bottom: 8px;
+    }
 
-  .run-wrap {
-    margin-top: 20px;
-    background: #f5f3ff;
-    border: 1.5px solid #c4b5fd;
-    border-left: 4px solid #7c3aed;
-    border-radius: 10px;
-    padding: 16px 20px;
-  }
-  .run-label {
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #7c3aed;
-    margin-bottom: 12px;
-  }
-  .run-steps {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-  }
-  .run-step {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    min-width: 88px;
-  }
-  .run-step-badge {
-    background: #ede9fe;
-    color: #5b21b6;
-    font-size: 13px;
-    font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 1.5px solid #c4b5fd;
-    white-space: nowrap;
-  }
-  .run-step-text {
-    font-size: 12px;
-    color: #6b7280;
-    text-align: center;
-    line-height: 1.4;
-    max-width: 100px;
-  }
-  .run-arrow {
-    font-size: 16px;
-    color: #c4b5fd;
-    margin-top: -14px;
-    flex-shrink: 0;
-  }
-</style>
+    .diagram-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #1c1c1c;
+      margin-bottom: 4px;
+    }
+
+    .diagram-subtitle {
+      font-size: 15px;
+      color: #6b7280;
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    .diagram-wrap {
+      margin-bottom: 56px;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+    }
+
+    .zoom-bar {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 100;
+      font-size: 12px;
+      color: #6b7280;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .zoom-bar input {
+      width: 100px;
+      accent-color: #7c3aed;
+      cursor: pointer;
+    }
+
+    .zoom-bar span {
+      min-width: 36px;
+      text-align: right;
+      color: #7c3aed;
+      font-weight: 700;
+    }
+
+    .page-inner {
+      transform-origin: top left;
+      width: 860px;
+    }
+
+    .run-wrap {
+      margin-top: 20px;
+      background: #f5f3ff;
+      border: 1.5px solid #c4b5fd;
+      border-left: 4px solid #7c3aed;
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+
+    .run-label {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #7c3aed;
+      margin-bottom: 12px;
+    }
+
+    .run-steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .run-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      min-width: 88px;
+    }
+
+    .run-step-badge {
+      background: #ede9fe;
+      color: #5b21b6;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1.5px solid #c4b5fd;
+      white-space: nowrap;
+    }
+
+    .run-step-text {
+      font-size: 12px;
+      color: #6b7280;
+      text-align: center;
+      line-height: 1.4;
+      max-width: 100px;
+    }
+
+    .run-arrow {
+      font-size: 16px;
+      color: #c4b5fd;
+      margin-top: -14px;
+      flex-shrink: 0;
+    }
+  </style>
 </head>
+
 <body>
 
-<!-- ============================================================ -->
-<!-- DIAGRAM A — light mode overview                              -->
-<!-- ============================================================ -->
-<div class="diagram-wrap">
-  <div class="section-label">LinkedIn Job Search Automation</div>
-  <div class="diagram-title">End-to-end pipeline overview</div>
-  <div class="diagram-subtitle">From automated job discovery to a tailored resume — in three phases</div>
+  <div class="zoom-bar">
+    <span>Zoom</span>
+    <input type="range" id="zoom" min="30" max="100" value="70" oninput="applyZoom(this.value)">
+    <span id="zoom-label">70%</span>
+  </div>
 
-  <svg viewBox="0 0 680 158" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <marker id="arA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    </marker>
-  </defs>
+  <div class="page-inner" id="page-inner">
 
-  <!-- Phase 1: blue -->
-  <rect x="28" y="12" width="158" height="72" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
-  <text font-family="Caveat, cursive" font-size="15" font-weight="700" fill="#1e3a8a" x="107" y="36" text-anchor="middle">01 · Job Notification</text>
-  <text font-family="Caveat, cursive" font-size="13" fill="#2563eb" x="107" y="54" text-anchor="middle">Automated · runs twice daily</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#3b82f6" x="107" y="72" text-anchor="middle">↳ Telegram on your phone</text>
+    <!-- ============================================================ -->
+    <!-- DIAGRAM A — light mode overview                              -->
+    <!-- ============================================================ -->
+    <div class="diagram-wrap">
+      <div class="section-label">LinkedIn Job Search Automation</div>
+      <div class="diagram-title">End-to-end pipeline overview</div>
+      <div class="diagram-subtitle">From automated job discovery to a tailored resume — in three phases</div>
 
-  <!-- Phase 2: purple -->
-  <rect x="261" y="12" width="158" height="72" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
-  <text font-family="Caveat, cursive" font-size="15" font-weight="700" fill="#3b0764" x="340" y="36" text-anchor="middle">02 · Job Filtration</text>
-  <text font-family="Caveat, cursive" font-size="13" fill="#6d28d9" x="340" y="54" text-anchor="middle">4 smart filters + LLM scoring</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#7c3aed" x="340" y="72" text-anchor="middle">↳ Only relevant roles reach you</text>
+      <svg viewBox="0 0 820 158" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round" />
+          </marker>
+        </defs>
 
-  <!-- Phase 3: orange -->
-  <rect x="494" y="12" width="158" height="72" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="1.5"/>
-  <text font-family="Caveat, cursive" font-size="15" font-weight="700" fill="#7c2d12" x="573" y="36" text-anchor="middle">03 · Job Application</text>
-  <text font-family="Caveat, cursive" font-size="13" fill="#c2410c" x="573" y="54" text-anchor="middle">Claude Desktop + MCP</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#ea580c" x="573" y="72" text-anchor="middle">↳ Resume, email, referral</text>
+        <!-- Phase 1: blue -->
+        <rect x="20" y="12" width="210" height="72" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5" />
+        <text font-family="Caveat, cursive" font-size="15" font-weight="700" fill="#1e3a8a" x="125" y="36"
+          text-anchor="middle">01 · Job Notification</text>
+        <text font-family="Caveat, cursive" font-size="13" fill="#2563eb" x="125" y="54" text-anchor="middle">Automated
+          · runs twice daily</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#3b82f6" x="125" y="72" text-anchor="middle">↳ Telegram
+          on your phone</text>
 
-  <!-- Arrows with user labels -->
-  <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="223" y="36" text-anchor="middle">👤 reviews</text>
-  <line x1="188" y1="48" x2="259" y2="48" stroke="#d1d5db" stroke-width="1.5" marker-end="url(#arA)"/>
+        <!-- Phase 2: purple -->
+        <rect x="305" y="12" width="210" height="72" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5" />
+        <text font-family="Caveat, cursive" font-size="15" font-weight="700" fill="#3b0764" x="410" y="36"
+          text-anchor="middle">02 · Job Filtration</text>
+        <text font-family="Caveat, cursive" font-size="13" fill="#6d28d9" x="410" y="54" text-anchor="middle">4 smart
+          filters + LLM scoring</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#7c3aed" x="410" y="72" text-anchor="middle">↳ Only
+          relevant roles reach you</text>
 
-  <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="456" y="36" text-anchor="middle">👤 pastes URL</text>
-  <line x1="421" y1="48" x2="492" y2="48" stroke="#d1d5db" stroke-width="1.5" marker-end="url(#arA)"/>
+        <!-- Phase 3: orange -->
+        <rect x="590" y="12" width="210" height="72" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="1.5" />
+        <text font-family="Caveat, cursive" font-size="15" font-weight="700" fill="#7c2d12" x="695" y="36"
+          text-anchor="middle">03 · Job Application</text>
+        <text font-family="Caveat, cursive" font-size="13" fill="#c2410c" x="695" y="54" text-anchor="middle">Claude
+          Desktop + MCP</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#ea580c" x="695" y="72" text-anchor="middle">↳ Resume,
+          email, referral</text>
 
-  <!-- Annotation badges -->
-  <rect x="28" y="100" width="158" height="20" rx="5" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="11" fill="#6b7280" x="107" y="114" text-anchor="middle">Cron · configurable · 7AM/7PM</text>
-  <rect x="28" y="124" width="158" height="20" rx="5" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="11" fill="#6b7280" x="107" y="138" text-anchor="middle">n8n · Docker · GCP · Caddy</text>
+        <!-- Arrows with user labels -->
+        <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="267" y="36" text-anchor="middle">👤
+          reviews</text>
+        <line x1="232" y1="48" x2="303" y2="48" stroke="#d1d5db" stroke-width="1.5" marker-end="url(#arA)" />
 
-  <rect x="261" y="100" width="158" height="20" rx="5" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="11" fill="#6b7280" x="340" y="114" text-anchor="middle">Gemini 2.5 Flash · 0–100% score</text>
-  <rect x="261" y="124" width="158" height="20" rx="5" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="11" fill="#6b7280" x="340" y="138" text-anchor="middle">Results persisted · Google Sheets</text>
+        <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="552" y="36" text-anchor="middle">👤 pastes
+          URL</text>
+        <line x1="517" y1="48" x2="588" y2="48" stroke="#d1d5db" stroke-width="1.5" marker-end="url(#arA)" />
 
-  <rect x="494" y="100" width="158" height="20" rx="5" fill="#fff7ed" stroke="#fed7aa" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="11" fill="#6b7280" x="573" y="114" text-anchor="middle">LaTeX resume · MCP server</text>
-  <rect x="494" y="124" width="158" height="20" rx="5" fill="#fff7ed" stroke="#fed7aa" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="11" fill="#6b7280" x="573" y="138" text-anchor="middle">Human-in-loop · approves edits</text>
+        <!-- Annotation badges -->
+        <rect x="20" y="100" width="210" height="20" rx="5" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="11" fill="#6b7280" x="125" y="114" text-anchor="middle">Cron ·
+          configurable · 7AM/7PM</text>
+        <rect x="20" y="124" width="210" height="20" rx="5" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="11" fill="#6b7280" x="125" y="138" text-anchor="middle">n8n ·
+          Docker · GCP · Caddy</text>
 
-  </svg>
-</div>
+        <rect x="305" y="100" width="210" height="20" rx="5" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="11" fill="#6b7280" x="410" y="114" text-anchor="middle">Gemini
+          2.5 Flash · 0–100% score</text>
+        <rect x="305" y="124" width="210" height="20" rx="5" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="11" fill="#6b7280" x="410" y="138" text-anchor="middle">Results
+          persisted · Google Sheets</text>
 
-<!-- ============================================================ -->
-<!-- DIAGRAM B — light mode detailed                              -->
-<!-- ============================================================ -->
-<div class="diagram-wrap">
-  <div class="section-label">Technical Architecture</div>
-  <div class="diagram-title">Detailed workflow — from trigger to tailored resume</div>
-  <div class="diagram-subtitle">Three n8n workflows on a GCP VM, connected to Claude Desktop via a custom MCP server</div>
+        <rect x="590" y="100" width="210" height="20" rx="5" fill="#fff7ed" stroke="#fed7aa" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="11" fill="#6b7280" x="695" y="114" text-anchor="middle">LaTeX
+          resume · MCP server</text>
+        <rect x="590" y="124" width="210" height="20" rx="5" fill="#fff7ed" stroke="#fed7aa" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="11" fill="#6b7280" x="695" y="138"
+          text-anchor="middle">Human-in-loop · approves edits</text>
 
-  <svg viewBox="0 0 680 1080" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <marker id="arB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    </marker>
-  </defs>
+      </svg>
+    </div>
 
-  <!-- GCP boundary: soft teal/green -->
-  <rect x="14" y="14" width="652" height="594" rx="14" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5" stroke-dasharray="6 4"/>
-  <text font-family="Caveat, cursive" font-size="12" font-weight="700" fill="#15803d" x="340" y="32" text-anchor="middle">GCP e2-micro VM · Docker · n8n · Caddy (auto-HTTPS) · GitHub Actions CI/CD</text>
-
-  <!-- W1 badge -->
-  <rect x="238" y="40" width="204" height="20" rx="5" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="12" font-weight="700" fill="#15803d" x="340" y="54" text-anchor="middle">Workflow 1 · Scheduled job scanner</text>
-
-  <!-- TRIGGERS: warm gray -->
-  <rect x="55" y="66" width="170" height="52" rx="8" fill="#f5f5f0" stroke="#d1d5db" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#374151" x="140" y="86" text-anchor="middle">Schedule trigger</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#6b7280" x="140" y="104" text-anchor="middle">Cron · 7AM / 7PM IST</text>
-
-  <rect x="255" y="66" width="170" height="52" rx="8" fill="#f5f5f0" stroke="#d1d5db" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#374151" x="340" y="86" text-anchor="middle">Telegram trigger</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#6b7280" x="340" y="104" text-anchor="middle">/jobs N (hours lookback)</text>
-
-  <rect x="455" y="66" width="170" height="52" rx="8" fill="#f5f5f0" stroke="#d1d5db" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#374151" x="540" y="86" text-anchor="middle">Manual / webhook</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#6b7280" x="540" y="104" text-anchor="middle">Dev and testing</text>
-
-  <!-- Merge -->
-  <line x1="140" y1="118" x2="140" y2="138" stroke="#d1d5db" stroke-width="1"/>
-  <line x1="340" y1="118" x2="340" y2="138" stroke="#d1d5db" stroke-width="1"/>
-  <line x1="540" y1="118" x2="540" y2="138" stroke="#d1d5db" stroke-width="1"/>
-  <line x1="140" y1="138" x2="540" y2="138" stroke="#d1d5db" stroke-width="1"/>
-  <line x1="340" y1="138" x2="340" y2="152" stroke="#d1d5db" stroke-width="1" marker-end="url(#arB)"/>
-
-  <!-- READ CONFIG: blue -->
-  <rect x="230" y="154" width="220" height="48" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="14" font-weight="700" fill="#1e3a8a" x="340" y="172" text-anchor="middle">Read config — Google Sheets</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#2563eb" x="340" y="189" text-anchor="middle">Company list · buckets · active flags</text>
-  <line x1="340" y1="202" x2="340" y2="216" stroke="#d1d5db" stroke-width="1" marker-end="url(#arB)"/>
-
-  <!-- SCRAPE: blue -->
-  <rect x="230" y="218" width="220" height="48" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="14" font-weight="700" fill="#1e3a8a" x="340" y="236" text-anchor="middle">Scrape LinkedIn</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#2563eb" x="340" y="253" text-anchor="middle">Fetch job listings · Bengaluru</text>
-  <line x1="340" y1="266" x2="340" y2="280" stroke="#d1d5db" stroke-width="1" marker-end="url(#arB)"/>
-
-  <!-- FILTRATION BOX: soft indigo -->
-  <rect x="28" y="282" width="624" height="172" rx="10" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1" stroke-dasharray="5 3"/>
-  <text font-family="Caveat, cursive" font-size="12" font-weight="700" fill="#4338ca" x="340" y="300" text-anchor="middle" letter-spacing="0.04em">4-LAYER FILTRATION PIPELINE · reduces noise before LLM is called</text>
-
-  <rect x="44" y="308" width="280" height="52" rx="8" fill="#e0e7ff" stroke="#818cf8" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#3730a3" x="184" y="326" text-anchor="middle">Layer 1 — Title filter</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#4338ca" x="184" y="344" text-anchor="middle">Excludes: QA, devops, mobile, intern, staff</text>
-
-  <rect x="356" y="308" width="280" height="52" rx="8" fill="#e0e7ff" stroke="#818cf8" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#3730a3" x="496" y="326" text-anchor="middle">Layer 2 — Experience filter</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#4338ca" x="496" y="344" text-anchor="middle">Skips if minimum experience &gt; 4 years</text>
-
-  <rect x="44" y="374" width="280" height="52" rx="8" fill="#e0e7ff" stroke="#818cf8" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#3730a3" x="184" y="392" text-anchor="middle">Layer 3 — Deduplication</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#4338ca" x="184" y="410" text-anchor="middle">Skips already-seen jobs by Job ID</text>
-
-  <!-- Layer 4: purple (LLM — distinct) -->
-  <rect x="356" y="374" width="280" height="52" rx="8" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.5"/>
-  <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#4c1d95" x="496" y="392" text-anchor="middle">Layer 4 — LLM match scoring</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#6d28d9" x="496" y="410" text-anchor="middle">Gemini Flash · 0–100% · sorted by score</text>
-
-  <line x1="340" y1="454" x2="340" y2="468" stroke="#d1d5db" stroke-width="1" marker-end="url(#arB)"/>
-
-  <!-- SHEETS: blue -->
-  <rect x="230" y="470" width="220" height="48" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="14" font-weight="700" fill="#1e3a8a" x="340" y="488" text-anchor="middle">Log to Google Sheets</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#2563eb" x="340" y="505" text-anchor="middle">Job details · match score · notified flag</text>
-  <line x1="452" y1="494" x2="490" y2="494" stroke="#e5e7eb" stroke-width="0.8" stroke-dasharray="3 2"/>
-  <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="494" y="490" text-anchor="start">Config + results + resume</text>
-  <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="494" y="502" text-anchor="start">= full persistence layer</text>
-
-  <!-- Fork -->
-  <line x1="340" y1="518" x2="340" y2="532" stroke="#d1d5db" stroke-width="1"/>
-  <line x1="140" y1="532" x2="560" y2="532" stroke="#d1d5db" stroke-width="1"/>
-  <line x1="140" y1="532" x2="140" y2="546" stroke="#d1d5db" stroke-width="1" marker-end="url(#arB)"/>
-  <line x1="560" y1="532" x2="560" y2="546" stroke="#d1d5db" stroke-width="1" marker-end="url(#arB)"/>
-  <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="240" y="528" text-anchor="middle">Workflow 1</text>
-  <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="460" y="528" text-anchor="middle">Workflow 2 · /search</text>
-
-  <!-- W1 OUTPUT: blue -->
-  <rect x="55" y="548" width="170" height="52" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#1e3a8a" x="140" y="566" text-anchor="middle">Telegram alert</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#2563eb" x="140" y="583" text-anchor="middle">🟢🟡🔴 ranked by match %</text>
-
-  <!-- W2 OUTPUT: purple -->
-  <rect x="475" y="548" width="170" height="52" rx="8" fill="#ede9fe" stroke="#a78bfa" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#4c1d95" x="560" y="566" text-anchor="middle">Telegram + Gmail</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#6d28d9" x="560" y="583" text-anchor="middle">Match % · gaps · on demand</text>
-  <rect x="480" y="534" width="116" height="16" rx="4" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="0.8"/>
-  <text font-family="Caveat, cursive" font-size="11" fill="#6d28d9" x="538" y="545" text-anchor="middle">stateless · on-demand</text>
-
-  <!-- USER BRIDGE -->
-  <line x1="340" y1="622" x2="340" y2="636" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="4 3"/>
-  <rect x="190" y="636" width="300" height="26" rx="8" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="13" fill="#6b7280" x="340" y="653" text-anchor="middle">👤 User copies LinkedIn job URL</text>
-  <line x1="340" y1="662" x2="340" y2="676" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arB)"/>
-
-  <!-- CLAUDE DESKTOP boundary: soft amber -->
-  <rect x="14" y="678" width="652" height="388" rx="14" fill="#fffbeb" stroke="#fcd34d" stroke-width="1.5" stroke-dasharray="6 4"/>
-  <text font-family="Caveat, cursive" font-size="12" font-weight="700" fill="#92400e" x="340" y="696" text-anchor="middle">Claude Desktop · user's machine</text>
-
-  <!-- W3 badge -->
-  <rect x="236" y="704" width="208" height="20" rx="5" fill="#fef3c7" stroke="#fcd34d" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="12" font-weight="700" fill="#92400e" x="340" y="718" text-anchor="middle">Workflow 3 · LinkedIn job parser</text>
-
-  <!-- MCP: amber -->
-  <rect x="230" y="726" width="220" height="52" rx="8" fill="#fef3c7" stroke="#fbbf24" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="14" font-weight="700" fill="#78350f" x="340" y="744" text-anchor="middle">LinkedIn Job Parser MCP</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#92400e" x="340" y="761" text-anchor="middle">Calls VM webhook · returns full JD</text>
-  <line x1="452" y1="752" x2="490" y2="752" stroke="#e5e7eb" stroke-width="0.8" stroke-dasharray="3 2"/>
-  <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="494" y="748" text-anchor="start">Registered in claude_desktop</text>
-  <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="494" y="760" text-anchor="start">No manual JD copy-paste</text>
-  <line x1="340" y1="778" x2="340" y2="792" stroke="#fbbf24" stroke-width="1" marker-end="url(#arB)"/>
-
-  <!-- KNOWLEDGE INPUTS -->
-  <rect x="28" y="794" width="624" height="60" rx="8" fill="#fafaf8" stroke="#e5e7eb" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="12" font-weight="700" fill="#6b7280" x="340" y="812" text-anchor="middle">Knowledge inputs loaded into Claude</text>
-  <rect x="44" y="820" width="180" height="26" rx="6" fill="#f5f5f0" stroke="#e5e7eb" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="12" fill="#374151" x="134" y="836" text-anchor="middle">Base LaTeX resume</text>
-  <rect x="250" y="820" width="180" height="26" rx="6" fill="#f5f5f0" stroke="#e5e7eb" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="12" fill="#374151" x="340" y="836" text-anchor="middle">Resume deep-dive KB</text>
-  <rect x="456" y="820" width="180" height="26" rx="6" fill="#f5f5f0" stroke="#e5e7eb" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="12" fill="#374151" x="546" y="836" text-anchor="middle">Project instruction set</text>
-  <line x1="340" y1="854" x2="340" y2="868" stroke="#fbbf24" stroke-width="1" marker-end="url(#arB)"/>
-
-  <!-- REQUIREMENTS MAP: amber -->
-  <rect x="230" y="870" width="220" height="48" rx="8" fill="#fef3c7" stroke="#fbbf24" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="14" font-weight="700" fill="#78350f" x="340" y="888" text-anchor="middle">Requirements map + edits</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#92400e" x="340" y="905" text-anchor="middle">JD vs resume · ✅ 🟡 🔴 per skill</text>
-  <line x1="340" y1="918" x2="340" y2="932" stroke="#fbbf24" stroke-width="1" marker-end="url(#arB)"/>
-
-  <!-- HUMAN APPROVAL: orange, thicker border to stand out -->
-  <rect x="240" y="934" width="200" height="48" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
-  <text font-family="Caveat, cursive" font-size="14" font-weight="700" fill="#7c2d12" x="340" y="952" text-anchor="middle">Human approval gate</text>
-  <text font-family="Caveat, cursive" font-size="12" fill="#c2410c" x="340" y="969" text-anchor="middle">Review and approve edits</text>
-  <line x1="442" y1="958" x2="480" y2="958" stroke="#e5e7eb" stroke-width="0.8" stroke-dasharray="3 2"/>
-  <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="484" y="954" text-anchor="start">LLM proposes · human decides</text>
-  <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="484" y="966" text-anchor="start">Preserves quality + honesty</text>
-  <line x1="340" y1="982" x2="340" y2="996" stroke="#ea580c" stroke-width="1" marker-end="url(#arB)"/>
-
-  <!-- 3 OUTPUTS: blue -->
-  <line x1="340" y1="996" x2="340" y2="1004" stroke="#ea580c" stroke-width="1"/>
-  <line x1="140" y1="1004" x2="520" y2="1004" stroke="#ea580c" stroke-width="1"/>
-  <line x1="140" y1="1004" x2="140" y2="1018" stroke="#ea580c" stroke-width="1" marker-end="url(#arB)"/>
-  <line x1="330" y1="1004" x2="330" y2="1018" stroke="#ea580c" stroke-width="1" marker-end="url(#arB)"/>
-  <line x1="520" y1="1004" x2="520" y2="1018" stroke="#ea580c" stroke-width="1" marker-end="url(#arB)"/>
-
-  <rect x="55" y="1018" width="170" height="36" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#1e3a8a" x="140" y="1040" text-anchor="middle">Resume PDF</text>
-
-  <rect x="245" y="1018" width="170" height="36" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#1e3a8a" x="330" y="1040" text-anchor="middle">Recruiter email</text>
-
-  <rect x="435" y="1018" width="170" height="36" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#1e3a8a" x="520" y="1040" text-anchor="middle">Referral message</text>
-
-  </svg>
-
-  <div class="run-wrap">
-    <div class="run-label">Typical run</div>
-    <div class="run-steps">
-      <div class="run-step">
-        <div class="run-step-badge">7 AM</div>
-        <div class="run-step-text">Cron fires automatically</div>
+    <!-- ============================================================ -->
+    <!-- DIAGRAM B — light mode detailed                              -->
+    <!-- ============================================================ -->
+    <div class="diagram-wrap">
+      <div class="section-label">Technical Architecture</div>
+      <div class="diagram-title">Detailed workflow — from trigger to tailored resume</div>
+      <div class="diagram-subtitle">Three n8n workflows on a GCP VM, connected to Claude Desktop via a custom MCP server
       </div>
-      <div class="run-arrow">→</div>
-      <div class="run-step">
-        <div class="run-step-badge">Scrape</div>
-        <div class="run-step-text">~50 companies on LinkedIn · Bengaluru</div>
-      </div>
-      <div class="run-arrow">→</div>
-      <div class="run-step">
-        <div class="run-step-badge">Filter</div>
-        <div class="run-step-text">4 layers remove noise + duplicates</div>
-      </div>
-      <div class="run-arrow">→</div>
-      <div class="run-step">
-        <div class="run-step-badge">Score</div>
-        <div class="run-step-text">Gemini matches jobs to your resume</div>
-      </div>
-      <div class="run-arrow">→</div>
-      <div class="run-step">
-        <div class="run-step-badge">Notify</div>
-        <div class="run-step-text">Telegram · ranked by match %</div>
-      </div>
-      <div class="run-arrow">→</div>
-      <div class="run-step">
-        <div class="run-step-badge">👤 Apply</div>
-        <div class="run-step-text">Paste URL → Claude generates resume + outreach</div>
+
+      <svg viewBox="0 0 680 1108" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round" />
+          </marker>
+        </defs>
+
+        <!-- GCP boundary: soft teal/green -->
+        <rect x="14" y="14" width="652" height="618" rx="14" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"
+          stroke-dasharray="6 4" />
+        <text font-family="Caveat, cursive" font-size="12" font-weight="700" fill="#15803d" x="340" y="32"
+          text-anchor="middle">GCP e2-micro VM · Docker · n8n · Caddy (auto-HTTPS) · GitHub Actions CI/CD</text>
+
+        <!-- W1 badge -->
+        <rect x="200" y="40" width="280" height="20" rx="5" fill="#dcfce7" stroke="#86efac" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="12" font-weight="700" fill="#15803d" x="340" y="54"
+          text-anchor="middle">Workflow 1 · Scheduled job scanner</text>
+
+        <!-- TRIGGERS: warm gray -->
+        <rect x="55" y="66" width="170" height="52" rx="8" fill="#f5f5f0" stroke="#d1d5db" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#374151" x="140" y="86"
+          text-anchor="middle">Schedule trigger</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#6b7280" x="140" y="104" text-anchor="middle">Cron ·
+          7AM / 7PM IST</text>
+
+        <rect x="255" y="66" width="170" height="52" rx="8" fill="#f5f5f0" stroke="#d1d5db" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#374151" x="340" y="86"
+          text-anchor="middle">Telegram trigger</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#6b7280" x="340" y="104" text-anchor="middle">/jobs N
+          (hours lookback)</text>
+
+        <rect x="455" y="66" width="170" height="52" rx="8" fill="#f5f5f0" stroke="#d1d5db" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#374151" x="540" y="86"
+          text-anchor="middle">Manual / webhook</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#6b7280" x="540" y="104" text-anchor="middle">Dev and
+          testing</text>
+
+        <!-- Merge -->
+        <line x1="140" y1="118" x2="140" y2="138" stroke="#d1d5db" stroke-width="1" />
+        <line x1="340" y1="118" x2="340" y2="138" stroke="#d1d5db" stroke-width="1" />
+        <line x1="540" y1="118" x2="540" y2="138" stroke="#d1d5db" stroke-width="1" />
+        <line x1="140" y1="138" x2="540" y2="138" stroke="#d1d5db" stroke-width="1" />
+        <line x1="340" y1="138" x2="340" y2="152" stroke="#d1d5db" stroke-width="1" marker-end="url(#arB)" />
+
+        <!-- READ CONFIG: blue -->
+        <rect x="230" y="154" width="220" height="48" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="14" font-weight="700" fill="#1e3a8a" x="340" y="172"
+          text-anchor="middle">Read config — Google Sheets</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#2563eb" x="340" y="189" text-anchor="middle">Company
+          list · buckets · active flags</text>
+        <line x1="340" y1="202" x2="340" y2="216" stroke="#d1d5db" stroke-width="1" marker-end="url(#arB)" />
+
+        <!-- SCRAPE: blue -->
+        <rect x="230" y="218" width="220" height="48" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="14" font-weight="700" fill="#1e3a8a" x="340" y="236"
+          text-anchor="middle">Scrape LinkedIn</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#2563eb" x="340" y="253" text-anchor="middle">Fetch job
+          listings · Bengaluru</text>
+        <line x1="340" y1="266" x2="340" y2="280" stroke="#d1d5db" stroke-width="1" marker-end="url(#arB)" />
+
+        <!-- FILTRATION BOX: soft indigo -->
+        <rect x="28" y="282" width="624" height="172" rx="10" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1"
+          stroke-dasharray="5 3" />
+        <text font-family="Caveat, cursive" font-size="12" font-weight="700" fill="#4338ca" x="340" y="300"
+          text-anchor="middle" letter-spacing="0.04em">4-LAYER FILTRATION PIPELINE · reduces noise before LLM is
+          called</text>
+
+        <rect x="44" y="308" width="280" height="52" rx="8" fill="#e0e7ff" stroke="#818cf8" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#3730a3" x="184" y="326"
+          text-anchor="middle">Layer 1 — Title filter</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#4338ca" x="184" y="344" text-anchor="middle">Excludes:
+          QA, devops, mobile, intern, staff</text>
+
+        <rect x="356" y="308" width="280" height="52" rx="8" fill="#e0e7ff" stroke="#818cf8" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#3730a3" x="496" y="326"
+          text-anchor="middle">Layer 2 — Experience filter</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#4338ca" x="496" y="344" text-anchor="middle">Skips if
+          minimum experience &gt; 4 years</text>
+
+        <rect x="44" y="374" width="280" height="52" rx="8" fill="#e0e7ff" stroke="#818cf8" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#3730a3" x="184" y="392"
+          text-anchor="middle">Layer 3 — Deduplication</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#4338ca" x="184" y="410" text-anchor="middle">Skips
+          already-seen jobs by Job ID</text>
+
+        <!-- Layer 4: purple (LLM — distinct) -->
+        <rect x="356" y="374" width="280" height="52" rx="8" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.5" />
+        <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#4c1d95" x="496" y="392"
+          text-anchor="middle">Layer 4 — LLM match scoring</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#6d28d9" x="496" y="410" text-anchor="middle">Gemini
+          Flash · 0–100% · sorted by score</text>
+
+        <line x1="340" y1="454" x2="340" y2="468" stroke="#d1d5db" stroke-width="1" marker-end="url(#arB)" />
+
+        <!-- SHEETS: blue -->
+        <rect x="230" y="470" width="220" height="48" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="14" font-weight="700" fill="#1e3a8a" x="340" y="488"
+          text-anchor="middle">Log to Google Sheets</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#2563eb" x="340" y="505" text-anchor="middle">Job
+          details · match score · notified flag</text>
+        <line x1="452" y1="494" x2="490" y2="494" stroke="#e5e7eb" stroke-width="0.8" stroke-dasharray="3 2" />
+        <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="494" y="490" text-anchor="start">Config +
+          results + resume</text>
+        <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="494" y="502" text-anchor="start">= full
+          persistence layer</text>
+
+        <!-- Fork -->
+        <line x1="340" y1="518" x2="340" y2="532" stroke="#d1d5db" stroke-width="1" />
+        <line x1="140" y1="532" x2="560" y2="532" stroke="#d1d5db" stroke-width="1" />
+        <line x1="140" y1="532" x2="140" y2="570" stroke="#d1d5db" stroke-width="1" marker-end="url(#arB)" />
+        <line x1="560" y1="532" x2="560" y2="570" stroke="#d1d5db" stroke-width="1" marker-end="url(#arB)" />
+        <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="240" y="528" text-anchor="middle">Workflow
+          1</text>
+        <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="460" y="528" text-anchor="middle">Workflow
+          2 · /search</text>
+
+        <!-- W1 OUTPUT: blue -->
+        <rect x="55" y="572" width="170" height="52" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#1e3a8a" x="140" y="590"
+          text-anchor="middle">Telegram alert</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#2563eb" x="140" y="607" text-anchor="middle">🟢🟡🔴
+          ranked by match %</text>
+
+        <!-- W2 OUTPUT: purple -->
+        <rect x="475" y="572" width="170" height="52" rx="8" fill="#ede9fe" stroke="#a78bfa" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#4c1d95" x="560" y="590"
+          text-anchor="middle">Telegram + Gmail</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#6d28d9" x="560" y="607" text-anchor="middle">Match % ·
+          gaps · on demand</text>
+        <rect x="480" y="556" width="116" height="16" rx="4" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="0.8" />
+        <text font-family="Caveat, cursive" font-size="11" fill="#6d28d9" x="538" y="567" text-anchor="middle">stateless
+          · on-demand</text>
+
+        <!-- USER BRIDGE -->
+        <line x1="340" y1="646" x2="340" y2="660" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="4 3" />
+        <rect x="190" y="660" width="300" height="26" rx="8" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="13" fill="#6b7280" x="340" y="677" text-anchor="middle">👤 User
+          copies LinkedIn job URL</text>
+        <line x1="340" y1="686" x2="340" y2="700" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="4 3"
+          marker-end="url(#arB)" />
+
+        <!-- CLAUDE DESKTOP boundary: soft amber -->
+        <rect x="14" y="702" width="652" height="388" rx="14" fill="#fffbeb" stroke="#fcd34d" stroke-width="1.5"
+          stroke-dasharray="6 4" />
+        <text font-family="Caveat, cursive" font-size="12" font-weight="700" fill="#92400e" x="340" y="720"
+          text-anchor="middle">Claude Desktop · user's machine</text>
+
+        <!-- W3 badge -->
+        <rect x="236" y="728" width="208" height="20" rx="5" fill="#fef3c7" stroke="#fcd34d" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="12" font-weight="700" fill="#92400e" x="340" y="742"
+          text-anchor="middle">Workflow 3 · LinkedIn job parser</text>
+
+        <!-- MCP: amber -->
+        <rect x="230" y="750" width="220" height="52" rx="8" fill="#fef3c7" stroke="#fbbf24" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="14" font-weight="700" fill="#78350f" x="340" y="768"
+          text-anchor="middle">LinkedIn Job Parser MCP</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#92400e" x="340" y="785" text-anchor="middle">Calls VM
+          webhook · returns full JD</text>
+        <line x1="452" y1="776" x2="490" y2="776" stroke="#e5e7eb" stroke-width="0.8" stroke-dasharray="3 2" />
+        <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="494" y="772" text-anchor="start">Registered
+          in claude_desktop</text>
+        <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="494" y="784" text-anchor="start">No manual
+          JD copy-paste</text>
+        <line x1="340" y1="802" x2="340" y2="816" stroke="#fbbf24" stroke-width="1" marker-end="url(#arB)" />
+
+        <!-- KNOWLEDGE INPUTS -->
+        <rect x="28" y="818" width="624" height="60" rx="8" fill="#fafaf8" stroke="#e5e7eb" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="12" font-weight="700" fill="#6b7280" x="340" y="836"
+          text-anchor="middle">Knowledge inputs loaded into Claude</text>
+        <rect x="44" y="844" width="180" height="26" rx="6" fill="#f5f5f0" stroke="#e5e7eb" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="12" fill="#374151" x="134" y="860" text-anchor="middle">Base
+          LaTeX resume</text>
+        <rect x="250" y="844" width="180" height="26" rx="6" fill="#f5f5f0" stroke="#e5e7eb" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="12" fill="#374151" x="340" y="860" text-anchor="middle">Resume
+          deep-dive KB</text>
+        <rect x="456" y="844" width="180" height="26" rx="6" fill="#f5f5f0" stroke="#e5e7eb" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="12" fill="#374151" x="546" y="860" text-anchor="middle">Project
+          instruction set</text>
+        <line x1="340" y1="878" x2="340" y2="892" stroke="#fbbf24" stroke-width="1" marker-end="url(#arB)" />
+
+        <!-- REQUIREMENTS MAP: amber -->
+        <rect x="230" y="894" width="220" height="48" rx="8" fill="#fef3c7" stroke="#fbbf24" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="14" font-weight="700" fill="#78350f" x="340" y="912"
+          text-anchor="middle">Requirements map + edits</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#92400e" x="340" y="929" text-anchor="middle">JD vs
+          resume · ✅ 🟡 🔴 per skill</text>
+        <line x1="340" y1="942" x2="340" y2="956" stroke="#fbbf24" stroke-width="1" marker-end="url(#arB)" />
+
+        <!-- HUMAN APPROVAL: orange, thicker border to stand out -->
+        <rect x="240" y="958" width="200" height="48" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="2" />
+        <text font-family="Caveat, cursive" font-size="14" font-weight="700" fill="#7c2d12" x="340" y="976"
+          text-anchor="middle">Human approval gate</text>
+        <text font-family="Caveat, cursive" font-size="12" fill="#c2410c" x="340" y="993" text-anchor="middle">Review
+          and approve edits</text>
+        <line x1="442" y1="982" x2="480" y2="982" stroke="#e5e7eb" stroke-width="0.8" stroke-dasharray="3 2" />
+        <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="484" y="978" text-anchor="start">LLM
+          proposes · human decides</text>
+        <text font-family="Caveat, cursive" font-size="11" fill="#9ca3af" x="484" y="990" text-anchor="start">Preserves
+          quality + honesty</text>
+        <line x1="340" y1="1006" x2="340" y2="1020" stroke="#ea580c" stroke-width="1" marker-end="url(#arB)" />
+
+        <!-- 3 OUTPUTS: blue -->
+        <line x1="340" y1="1020" x2="340" y2="1028" stroke="#ea580c" stroke-width="1" />
+        <line x1="140" y1="1028" x2="520" y2="1028" stroke="#ea580c" stroke-width="1" />
+        <line x1="140" y1="1028" x2="140" y2="1042" stroke="#ea580c" stroke-width="1" marker-end="url(#arB)" />
+        <line x1="330" y1="1028" x2="330" y2="1042" stroke="#ea580c" stroke-width="1" marker-end="url(#arB)" />
+        <line x1="520" y1="1028" x2="520" y2="1042" stroke="#ea580c" stroke-width="1" marker-end="url(#arB)" />
+
+        <rect x="55" y="1042" width="170" height="36" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#1e3a8a" x="140" y="1064"
+          text-anchor="middle">Resume PDF</text>
+
+        <rect x="245" y="1042" width="170" height="36" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#1e3a8a" x="330" y="1064"
+          text-anchor="middle">Recruiter email</text>
+
+        <rect x="435" y="1042" width="170" height="36" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1" />
+        <text font-family="Caveat, cursive" font-size="13" font-weight="700" fill="#1e3a8a" x="520" y="1064"
+          text-anchor="middle">Referral message</text>
+
+      </svg>
+
+      <div class="run-wrap">
+        <div class="run-label">Typical run</div>
+        <div class="run-steps">
+          <div class="run-step">
+            <div class="run-step-badge">7 AM</div>
+            <div class="run-step-text">Cron fires automatically</div>
+          </div>
+          <div class="run-arrow">→</div>
+          <div class="run-step">
+            <div class="run-step-badge">Scrape</div>
+            <div class="run-step-text">~50 companies on LinkedIn · Bengaluru</div>
+          </div>
+          <div class="run-arrow">→</div>
+          <div class="run-step">
+            <div class="run-step-badge">Filter</div>
+            <div class="run-step-text">4 layers remove noise + duplicates</div>
+          </div>
+          <div class="run-arrow">→</div>
+          <div class="run-step">
+            <div class="run-step-badge">Score</div>
+            <div class="run-step-text">Gemini matches jobs to your resume</div>
+          </div>
+          <div class="run-arrow">→</div>
+          <div class="run-step">
+            <div class="run-step-badge">Notify</div>
+            <div class="run-step-text">Telegram · ranked by match %</div>
+          </div>
+          <div class="run-arrow">→</div>
+          <div class="run-step">
+            <div class="run-step-badge">👤 Apply</div>
+            <div class="run-step-text">Paste URL → Claude generates resume + outreach</div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-</div>
 
-<script>
-  // Force SVG repaint once Caveat font is fully loaded
-  // Without this, SVG text renders before the font downloads and never repaints
-  document.fonts.load('700 16px Caveat').then(() => {
-    document.querySelectorAll('svg').forEach(svg => {
-      svg.style.display = 'none';
-      svg.getBoundingClientRect(); // force reflow
-      svg.style.display = '';
+  </div> <!-- end page-inner -->
+
+  <script>
+    function applyZoom(val) {
+      const el = document.getElementById('page-inner');
+      const scale = val / 100;
+      el.style.transform = 'scale(' + scale + ')';
+      el.style.marginBottom = '-' + (el.offsetHeight * (1 - scale)) + 'px';
+      document.getElementById('zoom-label').textContent = val + '%';
+    }
+    applyZoom(document.getElementById('zoom').value);
+    window.addEventListener('resize', () => applyZoom(document.getElementById('zoom').value));
+
+    document.fonts.load('700 16px Caveat').then(() => {
+      document.querySelectorAll('svg').forEach(svg => {
+        svg.style.display = 'none';
+        svg.getBoundingClientRect(); // force reflow
+        svg.style.display = '';
+      });
     });
-  });
-</script>
+  </script>
 </body>
+
 </html>
