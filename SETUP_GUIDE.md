@@ -25,7 +25,7 @@ First time: Create an owner account (email + password). Local only.
 
 ## Step 2: Set Up Google Sheet
 
-Open: https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_DOCUMENT_ID
+Create a new Google Sheet (or open your existing one).
 
 ### Tab 1: "Config"
 Rename default "Sheet1" to **Config**. Headers in Row 1:

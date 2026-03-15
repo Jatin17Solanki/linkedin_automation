@@ -2,7 +2,7 @@ const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { z } = require("zod");
 
-const WEBHOOK_URL = "https://YOUR_VM_IP.nip.io/webhook/parse-job";
+const WEBHOOK_URL = process.env.MCP_WEBHOOK_URL || "https://localhost:5678/webhook/parse-job";
 
 const server = new McpServer({
   name: "linkedin-job-parser",

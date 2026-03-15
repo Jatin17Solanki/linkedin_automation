@@ -108,7 +108,7 @@ Regex: `/-(\d{8,})(?:\?|$)/` — extracts the numeric job ID from LinkedIn URLs 
 **Results tab** (`gid=812188810`, output — workflow writes here):
 | JobID | Title | Company | Location | Link | ExperienceReq | PrimaryTag | FirstSeen | Notified | Score | Status |
 
-Sheet Document ID: `YOUR_GOOGLE_SHEET_DOCUMENT_ID`
+Sheet Document ID: `YOUR_GOOGLE_SHEET_DOCUMENT_ID` (find yours in the Google Sheets URL after `/d/`)
 
 **Note:** The workflow references the sheet by Document ID, not by name. You can rename the Google Sheet freely without changing the JSON.
 
@@ -405,18 +405,18 @@ New "Resume" tab in the same Google Sheet — two-column Key/Value layout:
 
 | Key | Value |
 |-----|-------|
-| name | Jatin Solanki |
-| title | Full-stack Software Engineer |
-| years_experience | 3.5 |
-| target_roles | SDE-II, Software Engineer, Backend Engineer, Full-Stack Engineer |
-| skills_languages | Java, SQL, JavaScript, TypeScript, Bash, Groovy, C/C++ |
-| skills_frameworks | Spring Boot, Hibernate/JPA, Apache Kafka, RESTful APIs, GraphQL, OAuth2/JWT, Node.js, Angular |
-| skills_databases | Oracle, MySQL, MongoDB |
-| skills_cloud | GCP, Docker, Kubernetes, OpenShift, Helm, Jenkins, Maven |
-| skills_other | Microservices Architecture, Event-Driven Systems, Distributed Systems, Design Patterns, TDD, CI/CD Pipelines |
+| name | Your Name |
+| title | Your Title |
+| years_experience | N |
+| target_roles | Target Role 1, Target Role 2, ... |
+| skills_languages | Language 1, Language 2, ... |
+| skills_frameworks | Framework 1, Framework 2, ... |
+| skills_databases | DB 1, DB 2, ... |
+| skills_cloud | Cloud/DevOps tools... |
+| skills_other | Other skills... |
 | experience_summary | (free text — key roles, achievements, companies) |
-| education | B.Tech Computer Science, Manipal Institute of Technology, CGPA 9.52/10, 2022 |
-| highlights | EUR 70mn annual cost savings, Kafka migration with zero disruption, 25% CI/CD runtime reduction |
+| education | Your degree, institution, year |
+| highlights | Key achievement 1, Key achievement 2, ... |
 
 ### LLM Matching (Gemini Flash)
 
