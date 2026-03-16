@@ -273,6 +273,55 @@ Auto-deploys workflow changes when `n8n_job_search_v1.json` is pushed to `main`.
 2. Optionally disable the "Webhook Trigger" node (not needed on cloud)
 3. Save and activate the workflow — Telegram will auto-register its webhook with n8n's HTTPS URL
 
+### Docker Operations Reference
+
+All commands run from `~/linkedin_automation/deploy/` on the VM.
+
+**Deploy / upgrade** (handles stop → remove → pull → start automatically):
+```bash
+docker compose -f docker-compose.prod.yml pull      # pull new image (if version changed)
+docker compose -f docker-compose.prod.yml up -d     # recreate containers with new config/image
+```
+`up -d` detects changes in the image or environment and restarts only what changed. You do not need to stop manually first.
+
+**Stop** (containers stop, volumes and data are untouched):
+```bash
+docker compose -f docker-compose.prod.yml stop
+```
+
+**Start** (after a stop):
+```bash
+docker compose -f docker-compose.prod.yml start
+```
+
+**Restart** (stop + start in one command — useful after a config tweak):
+```bash
+docker compose -f docker-compose.prod.yml restart
+```
+
+**Tear down completely** (stops and removes containers + network — data volumes are NOT deleted):
+```bash
+docker compose -f docker-compose.prod.yml down
+```
+
+**Tear down AND delete all data** (irreversible — wipes SQLite, credentials, workflows):
+```bash
+docker compose -f docker-compose.prod.yml down -v
+```
+
+**View logs** (live):
+```bash
+docker logs n8n-job-search -f
+docker logs caddy-proxy -f
+```
+
+**Check running containers:**
+```bash
+docker ps
+```
+
+**Data persistence:** Everything (workflows, credentials, executions, login) is stored in the `n8n_n8n_data` Docker volume on the VM's disk. Swapping the image version, restarting, or running `down` (without `-v`) never touches this volume.
+
 ## On-Demand Company Search Workflow (`/search`)
 
 A separate, stateless workflow (`n8n_company_search_v1.json`) for searching a specific company's openings on demand. Uses a **separate Telegram bot** (Telegram only supports one webhook per bot) and the same Config sheet (read-only), but does not write to Results or dedup against previous runs.
