@@ -1,3 +1,5 @@
 {$VM_IP}.nip.io {
-	reverse_proxy n8n:5678
+	reverse_proxy n8n:5678 {
+		header_up -X-Forwarded-For
+	}
 }
