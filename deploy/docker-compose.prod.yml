@@ -1,6 +1,6 @@
 services:
   n8n:
-    image: n8nio/n8n:2.11.4
+    image: n8nio/n8n:1.123.25
     container_name: n8n-job-search
     restart: unless-stopped
     ports:
@@ -18,7 +18,7 @@ services:
       - N8N_EDITOR_BASE_URL=https://${VM_IP}.nip.io/
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - N8N_EXTERNAL_ALLOWED_ENVIRONMENT_VARIABLES=GEMINI_API_KEY
-      - N8N_RUNNERS_GRANT_TOKEN_TTL=60
+      - N8N_RUNNERS_ENABLED=false
     volumes:
       - n8n_data:/home/node/.n8n
     healthcheck:
