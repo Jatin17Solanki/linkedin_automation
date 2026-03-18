@@ -1,8 +1,12 @@
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
-const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
+const {
+  StdioServerTransport,
+} = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { z } = require("zod");
 
-const WEBHOOK_URL = process.env.MCP_WEBHOOK_URL || "https://localhost:5678/webhook/parse-job";
+const WEBHOOK_URL =
+  process.env.MCP_WEBHOOK_URL ||
+  "https://35.224.120.172.nip.io/webhook/parse-job";
 
 const server = new McpServer({
   name: "linkedin-job-parser",
@@ -16,7 +20,7 @@ server.tool(
     url: z
       .string()
       .describe(
-        'LinkedIn job URL, e.g. "https://linkedin.com/jobs/view/4370408479"'
+        'LinkedIn job URL, e.g. "https://linkedin.com/jobs/view/4370408479"',
       ),
   },
   async ({ url }) => {
@@ -32,7 +36,11 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Webhook returned HTTP " + response.status + ": " + (await response.text()),
+              text:
+                "Webhook returned HTTP " +
+                response.status +
+                ": " +
+                (await response.text()),
             },
           ],
           isError: true,
@@ -80,7 +88,7 @@ server.tool(
         isError: true,
       };
     }
-  }
+  },
 );
 
 async function main() {

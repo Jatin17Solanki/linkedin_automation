@@ -252,10 +252,25 @@ Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Doc
 
 ### GCP VM Setup
 1. Create e2-micro VM (Ubuntu 22.04, us-central1-a) with HTTP/HTTPS firewall enabled
-3. SSH in, clone the repo, run `sudo bash deploy/setup.sh`
-4. Open `https://<VM_IP>.nip.io`, set up Google Sheets + Telegram credentials
-5. Import workflow, enable Telegram Trigger node, activate workflow
-6. Generate n8n API key (Settings > API) for CI/CD
+2. SSH in, clone the repo, run `sudo bash deploy/setup.sh`
+3. Open `https://<VM_IP>.nip.io`, set up Google Sheets + Telegram credentials
+4. Import workflow, enable Telegram Trigger node, activate workflow
+5. Generate n8n API key (Settings > API) for CI/CD
+
+### VM Swap Configuration (one-time, required)
+The e2-micro has only 1GB RAM. Without swap, the VM freezes completely when n8n's workflow run exhausts memory. Run these once after VM creation:
+
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+This adds a 2GB swapfile on the persistent disk (free tier) and sets swappiness=10 so the kernel only swaps under real memory pressure. Combined with the `mem_limit: 600m` on the n8n container in `docker-compose.prod.yml`, this ensures a bad workflow run degrades gracefully (container OOM-kills and restarts) rather than freezing the whole VM.
 
 ### GitHub Actions CI/CD
 Auto-deploys workflow changes when `n8n_job_search_v1.json` is pushed to `main`.
