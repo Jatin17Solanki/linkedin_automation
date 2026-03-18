@@ -19,6 +19,12 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - N8N_EXTERNAL_ALLOWED_ENVIRONMENT_VARIABLES=GEMINI_API_KEY
       - N8N_RUNNERS_ENABLED=false
+      - NODE_OPTIONS=--max-old-space-size=512
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=72
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=500
+    mem_limit: 600m
+    memswap_limit: 800m
     volumes:
       - n8n_data:/home/node/.n8n
     healthcheck:
