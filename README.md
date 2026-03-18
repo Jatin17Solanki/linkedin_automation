@@ -3,22 +3,13 @@
 n8n workflows that automatically search LinkedIn for job openings at target companies, filter by experience level, score each role against your resume using Gemini Flash, and notify you via Telegram with match percentages.
 
 ## How It Works
-
-```
-Google Sheet (companies)          Telegram
-        |                            ^
-        v                            |
-   n8n Workflow                      |
-        |                            |
-        v                            |
-  LinkedIn Search  -->  Filter  -->  Gemini Flash  -->  Notify
-  (public pages)     (exp, title)   (resume match)    (with match %)
-        |
-        v
-  Google Sheet (results + scores)
-```
-
 [View detailed architecture →](https://jatin17solanki.github.io/linkedin_automation/)
+
+<br>
+
+<img width="1375" height="455" alt="image" src="https://github.com/user-attachments/assets/b87a7269-584b-47bd-8cbc-2d28f6753763" />
+
+<br>
 
 **Three workflows:**
 
