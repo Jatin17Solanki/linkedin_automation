@@ -89,6 +89,11 @@ Applied to all buckets: staff, principal, lead, manager, director, ios, android,
 
 Additionally for Buckets 1 & 2 only: senior, sr.
 
+### Location Filter (in "Process & Filter Job" node)
+- Skips any job whose parsed location doesn't contain "bengaluru", "bangalore", or "karnataka" (case-insensitive)
+- If LinkedIn returns an empty location field, the job passes through (avoids false negatives)
+- Reason: LinkedIn's `f_PP` URL param alone is unreliable — non-Bangalore roles leak through
+
 ### Experience Filter (in "Process & Filter Job" node)
 - Regex-based extraction from job description
 - **Threshold:** `MAX_EXPERIENCE_YEARS = 4` — skips roles where minimum experience > 4 years
