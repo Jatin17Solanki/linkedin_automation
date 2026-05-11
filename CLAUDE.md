@@ -51,7 +51,7 @@ Schedule (7AM/7PM, 24h window)
 
 | Trigger | Time Window | How to Use | Requirements |
 |---------|-------------|------------|--------------|
-| Schedule | 24h (default) | Automatic at 7 AM and 7 PM IST | Workflow must be **activated** (toggle) |
+| Schedule | 24h (default) | Automatic at 7, 9:30, 11:30, 14, 16, 18, 20, 22 IST (8×/day) | Workflow must be **activated** (toggle) |
 | Manual | 24h (default) | Click "Execute Workflow" in n8n UI | None |
 | Webhook | Custom (default 12h) | `http://localhost:5678/webhook/job-search?hours=6` | Workflow must be **activated** |
 | Telegram | Custom (default 12h) | Message bot: `/jobs 6` | **HTTPS required** — disabled locally, enable on cloud |
@@ -156,7 +156,7 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 
 | # | Node Name | Type | Purpose |
 |---|-----------|------|---------|
-| 1 | Schedule Trigger | scheduleTrigger | Fires at 7 AM and 7 PM IST |
+| 1 | Schedule Trigger | scheduleTrigger | Fires 8×/day: 7, 9:30, 11:30, 14, 16, 18, 20, 22 IST |
 | 2 | Manual Trigger | manualTrigger | For ad-hoc runs from n8n UI |
 | 3 | Telegram Trigger | telegramTrigger | Listens for `/jobs` commands (DISABLED — enable on cloud) |
 | 4 | Webhook Trigger | webhook | Local dev trigger: `/webhook/job-search?hours=N` |
