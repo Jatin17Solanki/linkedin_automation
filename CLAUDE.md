@@ -114,6 +114,8 @@ Sheet Document ID: `YOUR_GOOGLE_SHEET_DOCUMENT_ID` (find yours in the Google She
 
 ## Telegram Notification Format
 
+**Send Telegram node**: Parse Mode must be set to **None** (not Markdown/MarkdownV2). If parse_mode is enabled, job titles or company names containing `_` or `*` cause a 400 "can't parse entities" error. The Format Telegram code nodes sanitize dynamic text via a `safe()` helper (replaces `_` with `-`, strips `*`) as a belt-and-suspenders measure.
+
 **When jobs are found (LLM enriched — sorted by match %):**
 ```
 🔔 3 New Openings Found
