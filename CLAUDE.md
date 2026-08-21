@@ -76,8 +76,8 @@ https://www.linkedin.com/jobs/search/?keywords=<encoded_boolean_query>&f_C=<comp
 
 - `f_TPR=r<seconds>` = time window (e.g., `r86400` = 24 hours)
 - `f_C` = comma-separated LinkedIn company IDs
-- `geoId=102713980` = India (broad geo)
-- `f_PP=105214831` = **Bengaluru, Karnataka** (precise location filter)
+- `geoId=102713980` = India (broad geo) — default, overridable via `LOCATION_GEO_ID` env var
+- `f_PP=105214831` = **Bengaluru, Karnataka** (precise location filter) — default, overridable via `LOCATION_F_PP` env var; accepts a comma-separated list of place IDs for multi-city (OR-matched)
 - Keywords use Boolean: `"SDE II" OR "SDE 2" OR ...`
 - Bucket 1 & 2 keywords include `AND NOT ("senior" OR "staff" OR ...)`
 - Bucket 3 & 4 keywords only exclude staff/manager/etc, NOT senior
@@ -90,13 +90,13 @@ Applied to all buckets: staff, principal, lead, manager, director, ios, android,
 Additionally for Buckets 1 & 2 only: senior, sr.
 
 ### Location Filter (in "Process & Filter Job" node)
-- Skips any job whose parsed location doesn't contain "bengaluru", "bangalore", or "karnataka" (case-insensitive)
+- Skips any job whose parsed location doesn't contain any of the `LOCATION_CITY_NAMES` substrings (default: "bengaluru", "bangalore", "karnataka"; case-insensitive), driven by `$env.LOCATION_CITY_NAMES` (comma-separated) with the default as fallback
 - If LinkedIn returns an empty location field, the job passes through (avoids false negatives)
 - Reason: LinkedIn's `f_PP` URL param alone is unreliable — non-Bangalore roles leak through
 
 ### Experience Filter (in "Process & Filter Job" node)
 - Regex-based extraction from job description
-- **Threshold:** `MAX_EXPERIENCE_YEARS = 4` — skips roles where minimum experience > 4 years
+- **Threshold:** `MAX_EXPERIENCE_YEARS`, driven by `$env.MAX_EXPERIENCE_YEARS` (default `4`) — skips roles where minimum experience exceeds the threshold
 - Examples: "3-5 years" (minExp=3, valid), "4+ years" (minExp=4, valid), "5+ years" (minExp=5, filtered out)
 - Patterns matched: "3+ years", "3-5 years", "minimum 3 years", "at least 3 years", etc.
 - If experience can't be parsed, passes through as "Not specified" for manual review
@@ -224,8 +224,8 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 
 ### Customization
 - **Companies:** Edit the Config tab in Google Sheets (no JSON changes needed)
-- **Location:** Change `LOCATION_FILTER` in "Build Search URLs" node (get `f_PP` value from LinkedIn URL)
-- **Experience threshold:** Change `MAX_EXPERIENCE_YEARS` in "Process & Filter Job" node
+- **Location:** Set `LOCATION_GEO_ID` / `LOCATION_F_PP` / `LOCATION_CITY_NAMES` env vars (get `f_PP` value from a LinkedIn search URL; supports comma-separated multi-city). Defaults to Bengaluru if unset — see SETUP_GUIDE.md's "Customizing Location, Experience & Role Filters" for the full table and a multi-city worked example.
+- **Experience threshold:** Set the `MAX_EXPERIENCE_YEARS` env var (default `4`)
 - **Schedule:** Edit cron expression in "Schedule Trigger" node
 - **For cloud deployment:** Enable the "Telegram Trigger" node and disable/remove "Webhook Trigger"
 
