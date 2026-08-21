@@ -1,6 +1,9 @@
 services:
   n8n:
-    image: n8nio/n8n:1.123.25
+    # Pre-built image published by CI (see .github/workflows/deploy.yml), auto-imports
+    # the 3 workflow JSONs on first start. Override DOCKER_IMAGE in deploy/.env if you've
+    # forked this repo and publish under your own GHCR namespace.
+    image: ${DOCKER_IMAGE:-ghcr.io/jatin17solanki/linkedin-automation-n8n:latest}
     container_name: n8n-job-search
     restart: unless-stopped
     ports:
