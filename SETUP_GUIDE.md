@@ -128,6 +128,44 @@ Open Google Sheet → Config tab:
 
 ---
 
+## Customizing Location, Experience & Role Filters
+
+These are controlled by environment variables (with sensible defaults baked in, so none are required):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `TELEGRAM_CHAT_ID` | *(none — required)* | Chat ID the bot sends notifications to |
+| `GEMINI_API_KEY` | *(none — required for LLM matching)* | Gemini Flash API key for resume matching |
+| `LOCATION_GEO_ID` | `102713980` (India) | LinkedIn `geoId` — broad country/region scope |
+| `LOCATION_F_PP` | `105214831` (Bengaluru) | LinkedIn `f_PP` place ID(s) — comma-separated for multi-city |
+| `LOCATION_CITY_NAMES` | `bengaluru,bangalore,karnataka` | Substrings checked against each job's parsed location; keep in sync with `LOCATION_F_PP` |
+| `MAX_EXPERIENCE_YEARS` | `4` | Skip roles requiring more than this many years |
+| `VM_IP` | — | Set by `deploy/setup.sh`; used for the `nip.io` HTTPS domain |
+| `N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD` | — | Protects the n8n web UI on cloud deployments |
+| `MCP_WEBHOOK_URL` | *(none — required for the MCP server)* | Base URL the `parse-linkedin-job` MCP tool calls |
+
+Set these in `deploy/.env` (copy from `deploy/.env.example`) for cloud deployments, or pass them as `environment:` values in `docker-compose.yml` for local dev.
+
+### Multi-city example
+
+LinkedIn's `f_PP` parameter accepts a comma-separated list of place IDs, OR-matched. To search Bengaluru **and** Mumbai:
+
+```
+LOCATION_F_PP=105214831,90009551
+LOCATION_CITY_NAMES=bengaluru,bangalore,karnataka,mumbai
+```
+
+Find a city's `f_PP` value by searching LinkedIn Jobs with that location filter applied and reading the `f_PP` param out of the resulting URL. `LOCATION_GEO_ID` stays a single broad value (e.g. `102713980` for all of India) — it isn't per-city.
+
+### Customizing role/seniority keywords
+
+The 4 search buckets (title patterns + which companies use "senior" for mid-level titles) and the negative title filter (excluded keywords like "staff", "principal", "QA") are inline JavaScript, not env-driven — this is intentional (see `CLAUDE.md`'s "4 Search Buckets" and "Filters" sections for the full logic). To change them, edit directly in the n8n UI:
+
+- **Bucket keywords:** `Build Search URLs` node (main workflow) / `Build Search URL` node (company search) — the `bucketKeywords` object
+- **Negative title filter:** `Filter & Accumulate Links` node (main workflow) / `Filter Links` node (company search)
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |
