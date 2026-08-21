@@ -44,13 +44,15 @@ n8n workflows that automatically search LinkedIn for job openings at target comp
 
 1. **Import** `n8n_job_search_v1.json` into n8n
 
-2. **Google Sheet** - create a sheet with three tabs:
+2. **Google Sheet** - create a blank sheet, then either:
+   - **Automated:** paste [`examples/google-sheet/bootstrap.gs`](examples/google-sheet/bootstrap.gs) into Extensions → Apps Script and run it once — creates all three tabs, pre-fills Config with the example company list and Resume with placeholder values for you to edit.
+   - **Manual:** create three tabs by hand and paste in the matching template from [`examples/google-sheet/`](examples/google-sheet/):
 
-   | Tab | Columns |
-   |-----|---------|
-   | Config | Company, CompanyID, Bucket, Active, Notes |
-   | Results | JobID, Title, Company, Location, Link, ExperienceReq, PrimaryTag, FirstSeen, Notified, Score, Status |
-   | Resume | Key, Value (your profile as key-value pairs) |
+     | Tab | Columns | Template |
+     |-----|---------|----------|
+     | Config | Company, CompanyID, Bucket, Active, Notes | [`config_data.csv`](examples/google-sheet/config_data.csv) |
+     | Results | JobID, Title, Company, Location, Link, ExperienceReq, PrimaryTag, FirstSeen, Notified, Score, Status | [`results_template.csv`](examples/google-sheet/results_template.csv) (headers only — the workflow writes rows here) |
+     | Resume | Key, Value (your profile as key-value pairs) | [`resume_template.csv`](examples/google-sheet/resume_template.csv) |
 
 3. **Connect credentials** in n8n UI:
    - Google Sheets OAuth2

@@ -1,0 +1,13 @@
+Key,Value
+name,Jane Doe
+title,Backend Software Engineer
+years_experience,3.5
+target_roles,"Software Engineer II, Backend Engineer, SDE 2"
+skills_languages,"Java, Python, JavaScript, SQL"
+skills_frameworks,"Spring Boot, Node.js, Express, React"
+skills_databases,"PostgreSQL, MySQL, Redis, MongoDB"
+skills_cloud,"AWS (EC2, S3, Lambda), Docker, Kubernetes, Terraform, GitHub Actions"
+skills_other,"REST API design, microservices, message queues (Kafka), system design, unit/integration testing"
+experience_summary,"3.5 years building backend services at a mid-size fintech startup. Led migration of a monolith to microservices, cutting p99 latency by 40%. Owned payments-reconciliation service handling 2M+ transactions/day. Mentored 2 junior engineers."
+education,"B.Tech in Computer Science, Example Institute of Technology, 2022"
+highlights,"Reduced infra cost 25% via autoscaling redesign; Built internal CLI tool adopted by 5 teams; Speaker at local backend meetup on event-driven architecture"

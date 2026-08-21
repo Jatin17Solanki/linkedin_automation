@@ -27,17 +27,30 @@ First time: Create an owner account (email + password). Local only.
 
 Create a new Google Sheet (or open your existing one).
 
+**Fastest path:** paste [`examples/google-sheet/bootstrap.gs`](../examples/google-sheet/bootstrap.gs) into Extensions → Apps Script and run the `bootstrap` function once — it creates all three tabs below with headers, pre-fills Config with the example company list, and pre-fills Resume with placeholder values you edit afterward. Skip to Step 3 if you use this.
+
+Otherwise, create the tabs by hand using the templates in [`examples/google-sheet/`](../examples/google-sheet/):
+
 ### Tab 1: "Config"
 Rename default "Sheet1" to **Config**. Headers in Row 1:
 
 | Company | CompanyID | Bucket | Active | Notes |
 
-Paste the data from `config_data.csv`.
+Paste the data from [`examples/google-sheet/config_data.csv`](../examples/google-sheet/config_data.csv).
 
 ### Tab 2: "Results"
 Create new tab **Results**. Headers in Row 1:
 
 | JobID | Title | Company | Location | Link | ExperienceReq | PrimaryTag | FirstSeen | Notified | Score | Status |
+
+Header row only — copy from [`examples/google-sheet/results_template.csv`](../examples/google-sheet/results_template.csv). The workflow writes rows here at runtime.
+
+### Tab 3: "Resume"
+Create new tab **Resume**. Headers in Row 1:
+
+| Key | Value |
+
+Paste the data from [`examples/google-sheet/resume_template.csv`](../examples/google-sheet/resume_template.csv), then replace the placeholder values with your own profile — this is what the LLM matching step scores jobs against.
 
 ---
 
