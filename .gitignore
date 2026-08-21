@@ -11,3 +11,7 @@ attachments/
 # Node modules
 node_modules/
 excalidraw/
+
+# Local session/process tracking (not part of the OSS deliverable)
+plan.md
+progress.md
