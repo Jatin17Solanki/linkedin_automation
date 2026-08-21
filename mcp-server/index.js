@@ -4,9 +4,14 @@ const {
 } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { z } = require("zod");
 
-const WEBHOOK_URL =
-  process.env.MCP_WEBHOOK_URL ||
-  "https://35.224.120.172.nip.io/webhook/parse-job";
+const WEBHOOK_URL = process.env.MCP_WEBHOOK_URL;
+
+if (!WEBHOOK_URL) {
+  console.error(
+    "MCP_WEBHOOK_URL environment variable is required (e.g. https://<your-host>/webhook/parse-job).",
+  );
+  process.exit(1);
+}
 
 const server = new McpServer({
   name: "linkedin-job-parser",
