@@ -75,11 +75,10 @@
         3024,
         3568
       ],
-      "webhookId": "47bb8f46-9a3a-49b4-9d54-48143a97effa",
       "credentials": {
         "telegramApi": {
-          "id": "V8RqyuTUrHutY1uh",
-          "name": "Telegram 1 - /jobs"
+          "id": "CONFIGURE_ME",
+          "name": "Telegram account"
         }
       }
     },
@@ -114,7 +113,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst msg = ($input.first().json.message?.text || '').trim();\n\n// Parse commands like: /jobs 6, /jobs 12, /jobs\nconst match = msg.match(/^\\/jobs(?:\\s+(\\d+))?$/);\n\nif (!match) {\n  // Not a valid command — ignore\n  staticData.telegramTriggered = false;\n  return [{json: {skip: true, reason: 'Invalid command. Use /jobs or /jobs <hours>'}}];\n}\n\nconst hours = match[1] ? parseInt(match[1]) : 12; // Default 12 hours if no number given\nconst seconds = hours * 3600;\n\nstaticData.telegramTriggered = true;\nstaticData.customTimeWindow = seconds;\nstaticData.triggerChatId = $input.first().json.message?.chat?.id || '951213350';\n\nconsole.log(`Telegram trigger: searching last ${hours} hours (${seconds}s)`);\n\nreturn [{json: {hours: hours, seconds: seconds, triggered: true}}];"
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst msg = ($input.first().json.message?.text || '').trim();\n\n// Parse commands like: /jobs 6, /jobs 12, /jobs\nconst match = msg.match(/^\\/jobs(?:\\s+(\\d+))?$/);\n\nif (!match) {\n  // Not a valid command — ignore\n  staticData.telegramTriggered = false;\n  return [{json: {skip: true, reason: 'Invalid command. Use /jobs or /jobs <hours>'}}];\n}\n\nconst hours = match[1] ? parseInt(match[1]) : 12; // Default 12 hours if no number given\nconst seconds = hours * 3600;\n\nstaticData.telegramTriggered = true;\nstaticData.customTimeWindow = seconds;\nstaticData.triggerChatId = $input.first().json.message?.chat?.id || $env.TELEGRAM_CHAT_ID || '';\n\nconsole.log(`Telegram trigger: searching last ${hours} hours (${seconds}s)`);\n\nreturn [{json: {hours: hours, seconds: seconds, triggered: true}}];"
       },
       "id": "e701b1f2-a5c8-487a-9f6d-400ac5d89b31",
       "name": "Parse Hours",
@@ -130,8 +129,8 @@
         "documentId": {
           "__rl": true,
           "mode": "list",
-          "value": "1i4eS-2TNhMJyY5JoTZhTrkXrn49xW0MbxpeaQ4NmHvc",
-          "cachedResultName": "n8n Test Claude"
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "Your Google Sheet"
         },
         "sheetName": {
           "__rl": true,
@@ -151,7 +150,7 @@
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "clv11G4noAEoZyj4",
+          "id": "CONFIGURE_ME",
           "name": "Google Sheets account"
         }
       }
@@ -174,8 +173,8 @@
         "documentId": {
           "__rl": true,
           "mode": "list",
-          "value": "1i4eS-2TNhMJyY5JoTZhTrkXrn49xW0MbxpeaQ4NmHvc",
-          "cachedResultName": "n8n Test Claude"
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "Your Google Sheet"
         },
         "sheetName": {
           "__rl": true,
@@ -195,7 +194,7 @@
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "clv11G4noAEoZyj4",
+          "id": "CONFIGURE_ME",
           "name": "Google Sheets account"
         }
       },
@@ -492,8 +491,8 @@
         "documentId": {
           "__rl": true,
           "mode": "list",
-          "value": "1i4eS-2TNhMJyY5JoTZhTrkXrn49xW0MbxpeaQ4NmHvc",
-          "cachedResultName": "n8n Test Claude"
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "Your Google Sheet"
         },
         "sheetName": {
           "__rl": true,
@@ -635,7 +634,7 @@
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "clv11G4noAEoZyj4",
+          "id": "CONFIGURE_ME",
           "name": "Google Sheets account"
         }
       }
@@ -658,8 +657,8 @@
         "documentId": {
           "__rl": true,
           "mode": "list",
-          "value": "1i4eS-2TNhMJyY5JoTZhTrkXrn49xW0MbxpeaQ4NmHvc",
-          "cachedResultName": "n8n Test Claude"
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "Your Google Sheet"
         },
         "sheetName": {
           "__rl": true,
@@ -679,7 +678,7 @@
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "clv11G4noAEoZyj4",
+          "id": "CONFIGURE_ME",
           "name": "Google Sheets account"
         }
       },
@@ -746,7 +745,7 @@
     },
     {
       "parameters": {
-        "chatId": "951213350",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
         "text": "={{ $json.message }}",
         "additionalFields": {
           "appendAttribution": false,
@@ -764,8 +763,8 @@
       "webhookId": "e8250672-b286-4b2f-98ad-b182773ede22",
       "credentials": {
         "telegramApi": {
-          "id": "V8RqyuTUrHutY1uh",
-          "name": "Telegram 1 - /jobs"
+          "id": "CONFIGURE_ME",
+          "name": "Telegram account"
         }
       }
     },
@@ -788,8 +787,8 @@
         "documentId": {
           "__rl": true,
           "mode": "list",
-          "value": "1i4eS-2TNhMJyY5JoTZhTrkXrn49xW0MbxpeaQ4NmHvc",
-          "cachedResultName": "n8n Test Claude"
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "Your Google Sheet"
         },
         "sheetName": {
           "__rl": true,
@@ -923,7 +922,7 @@
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "clv11G4noAEoZyj4",
+          "id": "CONFIGURE_ME",
           "name": "Google Sheets account"
         }
       },
@@ -931,7 +930,7 @@
     },
     {
       "parameters": {
-        "chatId": "951213350",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
         "text": "✅ Job search ran successfully — no new openings found this run.",
         "additionalFields": {
           "appendAttribution": false
@@ -948,8 +947,8 @@
       "webhookId": "001cbda8-17c1-4d7e-9b4a-79b09960e937",
       "credentials": {
         "telegramApi": {
-          "id": "V8RqyuTUrHutY1uh",
-          "name": "Telegram 1 - /jobs"
+          "id": "CONFIGURE_ME",
+          "name": "Telegram account"
         }
       }
     },
@@ -1038,8 +1037,8 @@
         "documentId": {
           "__rl": true,
           "mode": "list",
-          "value": "1i4eS-2TNhMJyY5JoTZhTrkXrn49xW0MbxpeaQ4NmHvc",
-          "cachedResultName": "n8n Test Claude"
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "Your Google Sheet"
         },
         "sheetName": {
           "__rl": true,
@@ -1059,7 +1058,7 @@
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "clv11G4noAEoZyj4",
+          "id": "CONFIGURE_ME",
           "name": "Google Sheets account"
         }
       },
@@ -1081,7 +1080,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{ $env.GEMINI_API_KEY }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1, maxOutputTokens: 65536, thinkingConfig: { thinkingBudget: 0 } } }) }}",
