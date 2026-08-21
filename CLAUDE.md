@@ -251,11 +251,14 @@ Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Doc
 ### Deployment Files
 | File | Purpose |
 |------|---------|
-| `deploy/docker-compose.prod.yml` | Production compose with n8n + Caddy |
+| `Dockerfile` | Thin image on `n8nio/n8n:1.123.25` that auto-imports the 3 workflow JSONs on first start |
+| `docker/import-entrypoint.sh` | Runs `n8n import:workflow` for each bundled JSON (marker-gated, first start only), then hands off to the base image's entrypoint |
+| `deploy/docker-compose.prod.yml` | Production compose with n8n (pulls the published GHCR image by default) + Caddy |
 | `deploy/Caddyfile` | Caddy reverse proxy config |
 | `deploy/setup.sh` | One-time VM setup (Docker, dirs, services) |
 | `deploy/import-workflow.sh` | Import/update workflow via n8n REST API |
-| `.github/workflows/deploy.yml` | CI/CD — auto-deploy on push to main |
+| `.github/workflows/deploy.yml` | CI/CD — auto-deploy workflow JSON changes on push to main |
+| `.github/workflows/docker-publish.yml` | CI/CD — builds and publishes the Docker image to GHCR on push to main / version tags |
 
 ### GCP VM Setup
 1. Create e2-micro VM (Ubuntu 22.04, us-central1-a) with HTTP/HTTPS firewall enabled

@@ -12,11 +12,12 @@
 ## Step 1: Start n8n
 
 ```bash
-mkdir -p ~/n8n-job-search
-cd ~/n8n-job-search
-# Copy docker-compose.yml here
-docker compose up -d
+git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
+cd YOUR_REPO
+docker compose up -d --build
 ```
+
+This builds the repo's own `Dockerfile` (pinned to `n8nio/n8n:1.123.25`) and auto-imports all 3 workflow JSONs on first start — you'll see them already in the Workflows list once n8n is up. **Auto-import only handles the workflow definitions.** Credentials (Google Sheets, Telegram, Gmail) still need one-time interactive setup in the n8n UI (Steps 3 and 5 below) — OAuth consent can't be scripted.
 
 Open: **http://localhost:5678**  
 First time: Create an owner account (email + password). Local only.
@@ -70,10 +71,11 @@ Paste the data from [`examples/google-sheet/resume_template.csv`](../examples/go
 
 ---
 
-## Step 4: Import Workflow
+## Step 4: Confirm the Workflow Is Present
 
-1. Workflows → Import from file
-2. Select `n8n_job_search_v1.json`
+The Docker image auto-imports all 3 workflow JSONs on first start (see Step 1) — open **Workflows** in the n8n UI and confirm `LinkedIn Job Search V1` is listed. Nothing to import manually.
+
+If you're running n8n a different way (not via this repo's `docker-compose.yml`/`Dockerfile`), import it yourself: Workflows → Import from file → select `n8n_job_search_v1.json`.
 
 ---
 
@@ -154,6 +156,7 @@ These are controlled by environment variables (with sensible defaults baked in, 
 | `LOCATION_CITY_NAMES` | `bengaluru,bangalore,karnataka` | Substrings checked against each job's parsed location; keep in sync with `LOCATION_F_PP` |
 | `MAX_EXPERIENCE_YEARS` | `4` | Skip roles requiring more than this many years |
 | `VM_IP` | — | Set by `deploy/setup.sh`; used for the `nip.io` HTTPS domain |
+| `DOCKER_IMAGE` | `ghcr.io/jatin17solanki/linkedin-automation-n8n:latest` | Pre-built image to pull for production; override if you've forked the repo and publish your own |
 | `N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD` | — | Protects the n8n web UI on cloud deployments |
 | `MCP_WEBHOOK_URL` | *(none — required for the MCP server)* | Base URL the `parse-linkedin-job` MCP tool calls |
 
@@ -272,8 +275,10 @@ sudo bash deploy/setup.sh
 The script will:
 1. Install Docker and Docker Compose
 2. Ask for n8n username and password (protects the web UI)
-3. Start n8n + Caddy containers
+3. Pull the pre-built image from GitHub Container Registry (`ghcr.io/jatin17solanki/linkedin-automation-n8n:latest` by default — override via `DOCKER_IMAGE` in `deploy/.env` if you've forked the repo and publish your own) and start n8n + Caddy containers
 4. Print your n8n URL
+
+All 3 workflow JSONs are already imported into the image (see Part 1, Step 1) — no manual import needed once the container is up.
 
 ### 2.3 — Verify
 
@@ -306,9 +311,9 @@ Open `https://<YOUR_VM_IP>.nip.io` in your browser. You should see the n8n login
 2. Paste your bot token (from @BotFather)
 3. Save
 
-### 3.3 — Import workflow + connect credentials
+### 3.3 — Connect credentials
 
-1. **Workflows** → import `n8n_job_search_v1.json`
+1. **Workflows** → open `LinkedIn Job Search V1` (already imported — see Step 2.2)
 2. Open each node with a ⚠️ warning → select the correct credential from the dropdown
 3. **Enable** the Telegram Trigger node (right-click → Enable)
 4. **Disable** the Webhook Trigger node (not needed on cloud)
@@ -407,6 +412,6 @@ sudo docker compose logs -f --tail=50
 # Restart everything
 sudo docker compose restart
 
-# Update n8n to latest
+# Pull the latest published image and recreate the container
 sudo docker compose pull n8n && sudo docker compose up -d
 ```

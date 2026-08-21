@@ -1,9 +1,13 @@
 # Local development only. For production deployment, see deploy/docker-compose.prod.yml
-version: '3.8'
-
+# Builds the repo's own Dockerfile, which auto-imports the 3 workflow JSONs on
+# first start (see Dockerfile / docker/import-entrypoint.sh). Run with:
+#   docker compose up --build
 services:
   n8n:
-    image: n8nio/n8n:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: linkedin-automation-n8n:local
     container_name: n8n-job-search
     restart: unless-stopped
     ports:

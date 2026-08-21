@@ -55,6 +55,14 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Fix:** Don't set `parse_mode` on the Send Telegram nodes. Two extra mitigations are already baked into the workflow's Code nodes: a `safe()` helper strips `_`/`*` from dynamic text before it's inserted into messages, and tags use `(SDE-II)` parentheses instead of `[SDE-II]` square brackets, since `[...]` triggers Markdown's link-entity parsing even without `parse_mode` in some clients.
 
+## `docker pull` from GHCR fails with "denied" / "not found" for a public repo
+
+**Symptom:** `.github/workflows/docker-publish.yml` runs green and pushes the image, but `docker pull ghcr.io/<owner>/linkedin-automation-n8n:latest` on the deploy VM fails with a 403/404 even though you never made the repo private.
+
+**Root cause:** GitHub Container Registry packages default to **private** on first publish, independent of the source repo's visibility — publishing via `GITHUB_TOKEN` doesn't make the package public automatically.
+
+**Fix:** After the first successful `docker-publish.yml` run, go to the package page (your GitHub profile/org → **Packages** → `linkedin-automation-n8n`) → **Package settings** → **Change visibility** → **Public**. One-time step; subsequent pushes stay public.
+
 ## Before you go live: check your Google Sheet's sharing settings
 
 The workflows read/write your Config, Results, and Resume tabs via the Google Sheets OAuth2 credential — not a public link — but it's easy to accidentally leave a Sheet shared as "Anyone with the link" from earlier testing or copy-pasting. Your Resume tab in particular contains personal career details. Before activating any workflow against a real Sheet, open its Share settings and confirm it's restricted to your own account (or explicitly trusted collaborators) rather than link-shared.

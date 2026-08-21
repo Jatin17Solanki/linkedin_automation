@@ -42,7 +42,7 @@ n8n workflows that automatically search LinkedIn for job openings at target comp
 
 ### Setup
 
-1. **Import** `n8n_job_search_v1.json` into n8n
+1. **Start n8n** — `docker compose up -d --build` (builds this repo's `Dockerfile`, which auto-imports all 3 workflow JSONs on first start). Using a different n8n instance? Import `n8n_job_search_v1.json` manually instead.
 
 2. **Google Sheet** - create a blank sheet, then either:
    - **Automated:** paste [`examples/google-sheet/bootstrap.gs`](examples/google-sheet/bootstrap.gs) into Extensions → Apps Script and run it once — creates all three tabs, pre-fills Config with the example company list and Resume with placeholder values for you to edit.
@@ -86,7 +86,7 @@ Internet --> Caddy (:443, nip.io) --> n8n (:5678) --> SQLite
 # On a fresh Ubuntu 22.04 VM:
 git clone <repo> && cd linkedin_automation
 sudo bash deploy/setup.sh
-# Then: open https://<VM_IP>.nip.io, connect credentials, import workflows
+# Then: open https://<VM_IP>.nip.io, connect credentials (workflows are pre-imported)
 ```
 
 GitHub Actions auto-deploys workflow changes on push to main.
@@ -118,6 +118,8 @@ n8n_job_search_v1.json      # Main scheduled job search workflow (37 nodes)
 n8n_company_search_v1.json  # On-demand /search workflow (30 nodes)
 n8n_job_parser_v1.json      # Job parser webhook (8 nodes)
 mcp-server/                 # MCP server for Claude.ai integration
+Dockerfile                  # Auto-imports the 3 workflow JSONs on first start
+docker/                     # Import entrypoint script
 deploy/                     # Docker Compose, Caddy, setup scripts
 .github/workflows/          # CI/CD pipeline
 CLAUDE.md                   # Detailed technical reference (for AI)
