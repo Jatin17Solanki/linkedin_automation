@@ -198,14 +198,32 @@ Settings tab wins when both are set. Most users should just use the Settings tab
 
 Set env vars in `deploy/.env` (copy from `deploy/.env.example`) for cloud deployments, or pass them as `environment:` values in `docker-compose.yml` for local dev. **Not yet implemented in `n8n_company_search_v1.json`** — the `/search` workflow still uses env vars only for location/experience, no Settings-tab override there yet.
 
-### Multi-city example
+### Adding multiple cities
 
-LinkedIn's `f_PP` parameter accepts a comma-separated list of place IDs, OR-matched. To search Bengaluru **and** Mumbai:
+Two fields change, both comma-separated lists — `location_geo_id` (Settings tab) / `LOCATION_GEO_ID` (env var) does **not** need to change for multi-city within the same country; it stays at the broad India-level default.
+
+1. **`location_f_pp` / `LOCATION_F_PP`** — LinkedIn's actual search filter. Accepts a comma-separated list of place IDs, OR-matched (LinkedIn returns results matching *any* listed city).
+2. **`location_city_names` / `LOCATION_CITY_NAMES`** — this project's own post-fetch safety check (see `CLAUDE.md`'s Filters section: "LinkedIn's `f_PP` URL param alone is unreliable — non-target-city roles leak through"). Add every city (and its state, as a fallback — see below) you added to `location_f_pp`, or jobs from that city will pass LinkedIn's filter but then get silently rejected by this project's own location check.
+
+**Getting a city's place ID:** go to `linkedin.com/jobs/search`, use the **Location** filter box, and pick the city from LinkedIn's own autocomplete dropdown (free-typed text won't generate a real place ID). Copy the `f_PP=<number>` value from the resulting URL.
+
+**Known place IDs** (found this way during this project's own testing — reuse these instead of re-deriving them):
+
+| City | `f_PP` value |
+|------|--------------|
+| Bengaluru | `105214831` |
+| Mumbai | `90009551` |
+| Hyderabad | `105556991` |
+| Gurugram | `106442238` |
+
+**Worked example** — Bengaluru + Hyderabad + Gurugram:
 
 ```
-LOCATION_F_PP=105214831,90009551
-LOCATION_CITY_NAMES=bengaluru,bangalore,karnataka,mumbai
+LOCATION_F_PP=105214831,105556991,106442238
+LOCATION_CITY_NAMES=bengaluru,bangalore,karnataka,hyderabad,telangana,gurugram,gurgaon,haryana
 ```
+
+Two things about the city-names list above worth noting as a pattern for any city you add: include the **state name** alongside the city (LinkedIn's parsed location text sometimes only surfaces the state), and include **known alternate spellings** (Gurugram was officially renamed from Gurgaon, and job postings inconsistently use either — matching only one would silently drop real matches under the other spelling).
 
 Find a city's `f_PP` value by searching LinkedIn Jobs with that location filter applied and reading the `f_PP` param out of the resulting URL. `LOCATION_GEO_ID` stays a single broad value (e.g. `102713980` for all of India) — it isn't per-city.
 

@@ -76,8 +76,8 @@ https://www.linkedin.com/jobs/search/?keywords=<encoded_boolean_query>&f_C=<comp
 
 - `f_TPR=r<seconds>` = time window (e.g., `r86400` = 24 hours)
 - `f_C` = comma-separated LinkedIn company IDs
-- `geoId=102713980` = India (broad geo) — default, overridable via `LOCATION_GEO_ID` env var
-- `f_PP=105214831` = **Bengaluru, Karnataka** (precise location filter) — default, overridable via `LOCATION_F_PP` env var; accepts a comma-separated list of place IDs for multi-city (OR-matched)
+- `geoId=102713980` = India (broad geo) — default, overridable via the Settings tab's `location_geo_id` or the `LOCATION_GEO_ID` env var
+- `f_PP=105214831` = **Bengaluru, Karnataka** (precise location filter) — default, overridable via the Settings tab's `location_f_pp` or the `LOCATION_F_PP` env var; accepts a comma-separated list of place IDs for multi-city (OR-matched) — see `SETUP_GUIDE.md`'s "Adding multiple cities" for known place IDs
 - Keywords use Boolean: `"SDE II" OR "SDE 2" OR ...`
 - Bucket 1 & 2 keywords include `AND NOT ("senior" OR "staff" OR ...)`
 - Bucket 3 & 4 keywords only exclude staff/manager/etc, NOT senior
@@ -239,7 +239,7 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 
 ### Customization
 - **Companies:** Edit the Config tab in Google Sheets (no JSON changes needed)
-- **Location:** Set `LOCATION_GEO_ID` / `LOCATION_F_PP` / `LOCATION_CITY_NAMES` env vars (get `f_PP` value from a LinkedIn search URL; supports comma-separated multi-city). Defaults to Bengaluru if unset — see SETUP_GUIDE.md's "Customizing Location, Experience & Role Filters" for the full table and a multi-city worked example.
+- **Location:** Set via the Settings tab (`location_geo_id`/`location_f_pp`/`location_city_names`) or matching env vars. Defaults to Bengaluru if unset. Supports multiple cities (comma-separated `location_f_pp` + `location_city_names`) — see `SETUP_GUIDE.md`'s "Adding multiple cities" for the step-by-step, a table of already-known place IDs (Bengaluru/Mumbai/Hyderabad/Gurugram), and a worked 3-city example. Don't re-derive a place ID that's already in that table.
 - **Experience threshold:** Set the `MAX_EXPERIENCE_YEARS` env var (default `4`)
 - **Schedule:** Edit cron expression in "Schedule Trigger" node
 - **For cloud deployment:** Enable the "Telegram Trigger" node and disable/remove "Webhook Trigger"

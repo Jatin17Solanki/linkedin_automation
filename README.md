@@ -108,6 +108,10 @@ Add companies to the Config sheet with their [LinkedIn Company ID](https://www.l
 | 3 | Generic (large tech) | No |
 | 4 | Generic (others) | No |
 
+### Location
+
+Defaults to Bengaluru. Set via the Settings tab (`location_geo_id`/`location_f_pp`/`location_city_names`) or matching env vars — see `SETUP_GUIDE.md`. Supports multiple cities at once (comma-separated); `SETUP_GUIDE.md`'s "Adding multiple cities" has the exact fields to change, how to find a city's LinkedIn place ID, and a table of already-known IDs (Bengaluru, Mumbai, Hyderabad, Gurugram) so you don't have to re-derive them.
+
 ### Experience Range Filtering
 
 `min_experience_years`/`max_experience_years` (Settings tab or env vars, see `SETUP_GUIDE.md`) describe **the experience bracket you're targeting** — e.g. "3 to 5 years." A role matches if its own stated range overlaps your bracket at all, touching boundaries included: a "2-4 years" posting matches a `3-5` target, and so does an open-ended "5+ years" posting (no stated ceiling means it always satisfies the upper-bound check). Only a role whose range falls entirely outside your bracket — e.g. "8+ years" against a `3-5` target — gets rejected.
