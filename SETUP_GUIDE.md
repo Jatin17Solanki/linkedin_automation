@@ -196,7 +196,7 @@ Settings tab wins when both are set. Most users should just use the Settings tab
 | `N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD` | — | — | Protects the n8n web UI on cloud deployments |
 | `MCP_WEBHOOK_URL` | — | *(none — required for the MCP server)* | Base URL the `parse-linkedin-job` MCP tool calls |
 
-Set env vars in `deploy/.env` (copy from `deploy/.env.example`) for cloud deployments, or pass them as `environment:` values in `docker-compose.yml` for local dev. **Not yet implemented in `n8n_company_search_v1.json`** — the `/search` workflow still uses env vars only for location/experience, no Settings-tab override there yet.
+Set env vars in `deploy/.env` (copy from `deploy/.env.example`) for cloud deployments, or pass them as `environment:` values in `docker-compose.yml` for local dev. `n8n_company_search_v1.json` (the on-demand `/search` workflow) uses the same Settings tab and precedence — both workflows stay in sync.
 
 ### Adding multiple cities
 

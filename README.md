@@ -168,7 +168,7 @@ Add to Claude Desktop config:
 
 ```
 n8n_job_search_v1.json      # Main scheduled job search workflow (37 nodes)
-n8n_company_search_v1.json  # On-demand /search workflow (30 nodes)
+n8n_company_search_v1.json  # On-demand /search workflow (32 nodes)
 n8n_job_parser_v1.json      # Job parser webhook (8 nodes)
 mcp-server/                 # MCP server for Claude.ai integration
 Dockerfile                  # Auto-imports the 3 workflow JSONs on first start
