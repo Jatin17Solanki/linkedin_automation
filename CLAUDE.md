@@ -113,6 +113,21 @@ Regex: `/-(\d{8,})(?:\?|$)/` — extracts the numeric job ID from LinkedIn URLs 
 **Results tab** (`gid=812188810`, output — workflow writes here):
 | JobID | Title | Company | Location | Link | ExperienceReq | PrimaryTag | FirstSeen | Notified | Score | Status |
 
+**Settings tab** (Key/Value, input — user editable, read live every run): a Google-Sheet-native override for the location/experience/match-threshold env vars, so they can be changed without a container restart. **Row 1 must be literally `Key` and `Value`** (exact spelling/case) — if your first data pair ends up in row 1 instead, n8n reads it as the header row and every setting silently falls back to its env var/default (see `TROUBLESHOOTING.md`; `Store Settings` logs a warning when this happens). Precedence for each: **Settings tab value (if non-blank) > matching env var > hardcoded default.** Read by `Read Settings` → `Store Settings` (populates `staticData.settings`), consumed in `Build Search URLs` (`location_geo_id`, `location_f_pp`) and `Process & Filter Job` (`max_experience_years`, `min_experience_years`, `location_city_names`), and `Format Telegram` (`min_match_percent`, see below).
+
+| Key | Maps to env var | Default if both blank |
+|-----|------------------|------------------------|
+| `location_geo_id` | `LOCATION_GEO_ID` | `102713980` (India) |
+| `location_f_pp` | `LOCATION_F_PP` | `105214831` (Bengaluru) |
+| `location_city_names` | `LOCATION_CITY_NAMES` | `bengaluru,bangalore,karnataka` |
+| `max_experience_years` | `MAX_EXPERIENCE_YEARS` | `4` |
+| `min_experience_years` | `MIN_EXPERIENCE_YEARS` | `0` |
+
+`min_experience_years`/`max_experience_years` together describe the experience bracket you're targeting (e.g. "3 to 5 years"). A role matches if its own stated range overlaps this bracket at all, touching boundaries counted as a match — a "2-4 years" posting matches a `3-5` target, and so does an open-ended "5+ years" posting (no ceiling to compare against, so it always satisfies the upper bound). Deliberately permissive: implemented in `Process & Filter Job` as `jobMin <= MAX_EXPERIENCE_YEARS && jobMax >= MIN_EXPERIENCE_YEARS` (jobMax = `Infinity` for open-ended roles), biased toward false positives over dropping borderline roles. Defaults (`min=0`, `max=4`) reproduce the original single-ceiling behavior exactly. Unparseable job experience always passes through regardless of the range (see "Honest filtering" below).
+| `min_match_percent` | `MIN_MATCH_PERCENT` | `0` (no suppression) |
+
+`min_match_percent` hides jobs scoring below the threshold from the Telegram message only — it does **not** affect whether they're written to the Results sheet or marked `Notified`; suppressed jobs are still marked notified (via the full, unfiltered job list in `Format Telegram`'s `jobIds`) so they're never re-scored on a later run. Only applies when Gemini scoring succeeded — the plain-fallback format (LLM failed) never suppresses, since there's no score to filter on. **Not currently implemented in `n8n_company_search_v1.json`** — a known gap, flagged for a follow-up pass to keep the two workflows' duplicated logic in sync (see `plan.md`'s "duplicated logic" decision).
+
 Sheet Document ID: `YOUR_GOOGLE_SHEET_DOCUMENT_ID` (find yours in the Google Sheets URL after `/d/`)
 
 **Note:** The workflow references the sheet by Document ID, not by name. You can rename the Google Sheet freely without changing the JSON.
@@ -228,6 +243,15 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 - **Experience threshold:** Set the `MAX_EXPERIENCE_YEARS` env var (default `4`)
 - **Schedule:** Edit cron expression in "Schedule Trigger" node
 - **For cloud deployment:** Enable the "Telegram Trigger" node and disable/remove "Webhook Trigger"
+
+### Title/Seniority Filters — agent instructions
+
+If a user asks you to change what job titles get filtered (e.g. "also exclude 'staff engineer'", "stop excluding 'senior' for bucket 3"), this is **not** an env var — it's inline JS regex in a Code node, deliberately left unparameterized. Exact locations:
+
+- **Negative title filter** (excludes matching titles from all buckets): node `Filter & Accumulate Links` in `n8n_job_search_v1.json`, node `Filter Links` in `n8n_company_search_v1.json`. Look for the `negativeBase` regex (applies to all 4 buckets) and `negativeSenior` regex (buckets 1 & 2 only, excludes `senior`/`sr`).
+- **Bucket keyword templates** (what search terms define "SDE II" vs "Level 3" vs generic): node `Build Search URLs` in the main workflow, `Build Search URL` in company search.
+
+**When editing either:** you must edit the same regex/keyword string in **both** `n8n_job_search_v1.json` and `n8n_company_search_v1.json` — this logic is intentionally duplicated between the two workflows (see "Duplicated logic" in `plan.md`'s locked-in decisions), not shared via a sub-workflow. Editing only one file will make the two workflows silently disagree on what counts as a match. After editing, validate both files with `node -e "JSON.parse(require('fs').readFileSync('<file>'))"` before considering the change done.
 
 ## Design Principles
 - Config-driven: Companies and buckets read from Google Sheet, not hardcoded

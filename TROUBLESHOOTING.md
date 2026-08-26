@@ -63,6 +63,33 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Fix:** After the first successful `docker-publish.yml` run, go to the package page (your GitHub profile/org → **Packages** → `linkedin-automation-n8n`) → **Package settings** → **Change visibility** → **Public**. One-time step; subsequent pushes stay public.
 
+## n8n startup warning: "deprecations related to your environment variables"
+
+**Symptom:** On every container start, n8n logs a deprecation block listing `DB_SQLITE_POOL_SIZE`, `N8N_RUNNERS_ENABLED`, `N8N_BLOCK_ENV_ACCESS_IN_NODE`, and `N8N_GIT_NODE_DISABLE_BARE_REPOS`.
+
+**Which of these actually matter here:**
+- **`N8N_BLOCK_ENV_ACCESS_IN_NODE`** — matters a lot. Every Code node in both workflows reads config via `$env.X` (`LOCATION_GEO_ID`, `MAX_EXPERIENCE_YEARS`, `TELEGRAM_CHAT_ID`, `GEMINI_API_KEY`, etc. — this is the entire Phase 2 parameterization mechanism). This currently works only because n8n 1.123.25's *default* for this flag happens to be `false` (env access allowed). n8n's own warning says the default flips to `true` (blocked) in a future version — an unpinned upgrade would silently break every env-var-driven Code node with no obvious error, since `$env.X` would just start returning `undefined`. Both `docker-compose.yml` and `deploy/docker-compose.prod.yml` now set `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` explicitly so this can't silently regress.
+- **`N8N_RUNNERS_ENABLED`** — already relevant per the task-runner entry above; both compose files now set `N8N_RUNNERS_ENABLED=false` explicitly (previously only `deploy/docker-compose.prod.yml` did).
+- `DB_SQLITE_POOL_SIZE` (a performance tuning knob) and `N8N_GIT_NODE_DISABLE_BARE_REPOS` (only relevant if you use n8n's Git node, which this project doesn't) — safe to ignore, not set here.
+
+**Fix:** already applied — see the two `N8N_*` lines above in both compose files. If you still see the `N8N_RUNNERS_ENABLED`/`N8N_BLOCK_ENV_ACCESS_IN_NODE` lines in the deprecation block after pulling the latest compose files, confirm your container actually picked up the new env (`docker compose up -d` recreates; a plain `restart` does not).
+
+## Settings/Resume tab values silently ignored (everything falls back to defaults)
+
+**Symptom:** You set a value in the Settings tab (e.g. `min_match_percent`) but the workflow behaves as if it were never set — no error, just silently uses the default.
+
+**Root cause:** Any Key/Value tab (Settings, Resume) is read by n8n's Google Sheets node using **row 1 as the column headers**. If row 1 doesn't literally read `Key` / `Value` (exact spelling and case) — e.g. if you typed your first setting's actual key/value pair into row 1 instead of the header labels — n8n reads that first data pair as the headers instead, and every subsequent row's key/value gets misread. This is easy to hit when creating a tab by hand (skipping `bootstrap.gs`, which always gets the header row right).
+
+**Fix:** Row 1 of the Settings/Resume tab must be exactly `Key` and `Value` as plain header text; your actual data starts at row 2. As of 2026-08-25, `Store Settings` logs an explicit warning (`WARNING: Settings tab has N row(s) but none had a recognizable Key column...`, visible in that node's execution output) when this happens, showing you exactly what row 1 was read as — check n8n's execution log for that node if a Settings value doesn't seem to be taking effect.
+
+## Re-importing a workflow resets your Google Sheets node selections
+
+**Symptom:** After using **⋯ → Import from File** to pick up an updated `n8n_job_search_v1.json` (e.g. a new release, or a node you edited by hand), most Google Sheets nodes' **Document** field reverts to the placeholder, and re-selecting your Sheet also blanks out the **Sheet** field, requiring you to set both by hand again.
+
+**Root cause:** the committed JSON always ships with a placeholder `documentId` (`YOUR_GOOGLE_SHEET_DOCUMENT_ID`) — a real Sheet ID can't be baked into a public template. A full reimport replaces a node's entire parameter block with what's in the file, placeholder included, wiping out whatever real Sheet you'd previously selected. n8n's resource-locator UI also clears the Sheet field's state whenever you touch the Document dropdown, even for fields using `name` mode — this appears to be inherent n8n UI behavior, not something fixable from the workflow JSON.
+
+**Fix:** none available — this is expected any time you reimport the whole workflow (initial setup, or pulling a future release with workflow changes). After any reimport, re-check all 7 Google Sheets nodes (`Read Config`, `Read Results`, `Append to Results`, `Read Unnotified`, `Update Notified Status`, `Read Resume`, `Read Settings`) per `SETUP_GUIDE.md` Step 5. If you're only changing a Code node's JS logic (not adding/removing nodes), you can avoid this entirely by pasting the updated code directly into that one node instead of reimporting the whole file.
+
 ## Before you go live: check your Google Sheet's sharing settings
 
 The workflows read/write your Config, Results, and Resume tabs via the Google Sheets OAuth2 credential — not a public link — but it's easy to accidentally leave a Sheet shared as "Anyone with the link" from earlier testing or copy-pasting. Your Resume tab in particular contains personal career details. Before activating any workflow against a real Sheet, open its Share settings and confirm it's restricted to your own account (or explicitly trusted collaborators) rather than link-shared.
