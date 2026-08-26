@@ -6,9 +6,14 @@
       "name": "Telegram Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
-      "position": [-800, 0],
+      "position": [
+        -800,
+        0
+      ],
       "parameters": {
-        "updates": ["message"],
+        "updates": [
+          "message"
+        ],
         "additionalFields": {}
       },
       "credentials": {
@@ -23,7 +28,10 @@
       "name": "Parse Search Command",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-500, 0],
+      "position": [
+        -500,
+        0
+      ],
       "parameters": {
         "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst msg = ($input.first().json.message?.text || '').trim();\nconst chatId = $input.first().json.message?.chat?.id || '';\n\nstaticData.chatId = String(chatId);\n\n// Parse: /search CompanyName [Days]\nconst match = msg.match(/^\\/search\\s+(.+?)(?:\\s+(\\d+))?\\s*$/);\n\nif (!match) {\n  staticData.parseError = true;\n  staticData.companyQuery = '';\n  staticData.days = 0;\n  return [{json: {\n    parseError: true,\n    chatId: String(chatId),\n    errorMessage: \"Invalid command format. Use: /search CompanyName [Days]\\nExamples:\\n  /search Oracle 30\\n  /search Google\"\n  }}];\n}\n\nconst companyQuery = match[1].trim();\nlet days = match[2] ? parseInt(match[2]) : 7;\n// Clamp to 1-90\ndays = Math.max(1, Math.min(90, days));\nconst seconds = days * 86400;\n\nstaticData.parseError = false;\nstaticData.companyQuery = companyQuery;\nstaticData.days = days;\nstaticData.timeWindowSeconds = seconds;\n\nconsole.log(`Search command: company='${companyQuery}', days=${days} (${seconds}s)`);\n\nreturn [{json: {\n  parseError: false,\n  companyQuery: companyQuery,\n  days: days,\n  seconds: seconds,\n  chatId: String(chatId)\n}}];"
       }
@@ -33,7 +41,10 @@
       "name": "Read Config",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.6,
-      "position": [-200, 0],
+      "position": [
+        -200,
+        0
+      ],
       "parameters": {
         "options": {},
         "sheetName": {
@@ -61,9 +72,12 @@
       "name": "Lookup Company",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [100, 0],
+      "position": [
+        100,
+        0
+      ],
       "parameters": {
-        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst config = $input.all().map(i => i.json);\nconst query = (staticData.companyQuery || '').toLowerCase();\n\n// If parse error, pass through with no matches\nif (staticData.parseError) {\n  staticData.matchedCompanies = [];\n  return [{json: {found: false, reason: 'parse_error'}}];\n}\n\n// Case-insensitive partial match against company names\nconst matches = config.filter(c => {\n  const isActive = String(c.Active).toUpperCase() === 'TRUE' || c.Active === true;\n  if (!isActive) return false;\n  const name = (c.Company || '').toLowerCase();\n  return name.includes(query);\n});\n\nstaticData.matchedCompanies = matches;\n\nif (matches.length === 0) {\n  console.log(`No company found matching '${query}' in config`);\n  return [{json: {found: false, query: query, matchCount: 0}}];\n}\n\nconst names = matches.map(m => m.Company).join(', ');\nconsole.log(`Found ${matches.length} match(es) for '${query}': ${names}`);\n\nreturn [{json: {\n  found: true,\n  query: query,\n  matchCount: matches.length,\n  matchedNames: names,\n  matches: matches.map(m => ({company: m.Company, companyId: m.CompanyID, bucket: String(m.Bucket)}))\n}}];"
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst config = $input.all().map(i => i.json);\nconst query = (staticData.companyQuery || '').toLowerCase();\n\n// If parse error, pass through with no matches\nif (staticData.parseError) {\n  staticData.matchedCompanies = [];\n  return [{json: {found: false, reason: 'parse_error'}}];\n}\n\n// Case-insensitive partial match against company names\nconst matches = config.filter(c => {\n  // Active status intentionally NOT checked here: /search is a deliberate,\n  // on-demand single-company lookup, not the passive scheduled bulk search\n  // that Active is meant to gate. A company set Active=FALSE (e.g. to keep\n  // it out of noisy scheduled digests) should still be reachable via /search.\n  const name = (c.Company || '').toLowerCase();\n  return name.includes(query);\n});\n\nstaticData.matchedCompanies = matches;\n\nif (matches.length === 0) {\n  console.log(`No company found matching '${query}' in config`);\n  return [{json: {found: false, query: query, matchCount: 0}}];\n}\n\nconst names = matches.map(m => m.Company).join(', ');\nconsole.log(`Found ${matches.length} match(es) for '${query}': ${names}`);\n\nreturn [{json: {\n  found: true,\n  query: query,\n  matchCount: matches.length,\n  matchedNames: names,\n  matches: matches.map(m => ({company: m.Company, companyId: m.CompanyID, bucket: String(m.Bucket)}))\n}}];"
       }
     },
     {
@@ -71,7 +85,10 @@
       "name": "Company Found?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [400, 0],
+      "position": [
+        400,
+        0
+      ],
       "parameters": {
         "options": {},
         "conditions": {
@@ -101,7 +118,10 @@
       "name": "Send Error Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [700, 200],
+      "position": [
+        700,
+        200
+      ],
       "parameters": {
         "chatId": "={{ $('Parse Search Command').first().json.chatId }}",
         "text": "={{ $('Parse Search Command').first().json.parseError ? $('Parse Search Command').first().json.errorMessage : \"Company '\" + $('Lookup Company').first().json.query + \"' not found in config. Add it to the Config sheet with its LinkedIn Company ID to enable search.\" }}",
@@ -121,9 +141,12 @@
       "name": "Build Search URL",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, -200],
+      "position": [
+        700,
+        -200
+      ],
       "parameters": {
-        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst matches = staticData.matchedCompanies || [];\nconst seconds = staticData.timeWindowSeconds || 604800; // default 7 days\n\nconst LOCATION = 'India';\nconst GEO_ID = $env.LOCATION_GEO_ID || '102713980';\nconst LOCATION_FILTER = $env.LOCATION_F_PP || '105214831'; // f_PP place ID(s) -- comma-separated for multi-city; see LOCATION_F_PP\n\n// Bucket keyword templates (same as main workflow)\nconst bucketKeywords = {\n  '1': '\"software development engineer\" OR \"SDE\" OR \"SDE II\" OR \"SDE 2\" OR \"SDE-II\" OR \"software engineer II\" OR \"software engineer 2\" OR \"software engineer - II\"',\n  '2': '\"software engineer III\" OR \"software engineer 3\" OR \"software developer 3\"',\n  '3': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"Senior Member, Tech\" OR \"member of technical staff\"',\n  '4': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"'\n};\n\n// Group matched companies by bucket\nconst buckets = {};\nfor (const m of matches) {\n  const bucket = String(m.Bucket);\n  if (!buckets[bucket]) buckets[bucket] = [];\n  buckets[bucket].push(String(m.CompanyID));\n}\n\n// Build one URL per bucket\nconst urls = [];\nfor (const [bucket, companyIds] of Object.entries(buckets)) {\n  const keywords = bucketKeywords[bucket];\n  if (!keywords || companyIds.length === 0) continue;\n\n  const encodedKeywords = encodeURIComponent(keywords);\n  const companyFilter = companyIds.join(',');\n  const encodedLocation = encodeURIComponent(LOCATION);\n\n  const url = `https://www.linkedin.com/jobs/search/?keywords=${encodedKeywords}&f_C=${companyFilter}&f_TPR=r${seconds}&location=${encodedLocation}&geoId=${GEO_ID}&f_PP=${LOCATION_FILTER}&sortBy=DD`;\n\n  urls.push({\n    url: url,\n    bucket: bucket,\n    companyCount: companyIds.length\n  });\n}\n\n// Initialize accumulator\nstaticData.foundJobLinks = [];\n\nconsole.log(`Built ${urls.length} search URL(s) for ${matches.length} matched company/companies`);\n\nif (urls.length === 0) {\n  return [{json: {url: '', bucket: '0', companyCount: 0, noUrls: true}}];\n}\n\nreturn urls.map(u => ({json: u}));"
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst matches = staticData.matchedCompanies || [];\nconst seconds = staticData.timeWindowSeconds || 604800; // default 7 days\n\nconst LOCATION = 'India';\n// Settings tab (Read Settings/Store Settings, above) > env var > hardcoded default\nconst settings = staticData.settings || {};\nconst GEO_ID = (settings.location_geo_id || '').trim() || $env.LOCATION_GEO_ID || '102713980';\nconst LOCATION_FILTER = (settings.location_f_pp || '').trim() || $env.LOCATION_F_PP || '105214831'; // f_PP place ID(s) -- comma-separated for multi-city; see LOCATION_F_PP / Settings tab\n\n// Bucket keyword templates (same as main workflow)\nconst bucketKeywords = {\n  '1': '\"software development engineer\" OR \"SDE\" OR \"SDE II\" OR \"SDE 2\" OR \"SDE-II\" OR \"software engineer II\" OR \"software engineer 2\" OR \"software engineer - II\"',\n  '2': '\"software engineer III\" OR \"software engineer 3\" OR \"software developer 3\"',\n  '3': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"Senior Member, Tech\" OR \"member of technical staff\"',\n  '4': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"'\n};\n\n// Group matched companies by bucket\nconst buckets = {};\nfor (const m of matches) {\n  const bucket = String(m.Bucket);\n  if (!buckets[bucket]) buckets[bucket] = [];\n  buckets[bucket].push(String(m.CompanyID));\n}\n\n// Build one URL per bucket\nconst urls = [];\nfor (const [bucket, companyIds] of Object.entries(buckets)) {\n  const keywords = bucketKeywords[bucket];\n  if (!keywords || companyIds.length === 0) continue;\n\n  const encodedKeywords = encodeURIComponent(keywords);\n  const companyFilter = companyIds.join(',');\n  const encodedLocation = encodeURIComponent(LOCATION);\n\n  const url = `https://www.linkedin.com/jobs/search/?keywords=${encodedKeywords}&f_C=${companyFilter}&f_TPR=r${seconds}&location=${encodedLocation}&geoId=${GEO_ID}&f_PP=${LOCATION_FILTER}&sortBy=DD`;\n\n  urls.push({\n    url: url,\n    bucket: bucket,\n    companyCount: companyIds.length\n  });\n}\n\n// Initialize accumulator\nstaticData.foundJobLinks = [];\n\nconsole.log(`Built ${urls.length} search URL(s) for ${matches.length} matched company/companies`);\n\nif (urls.length === 0) {\n  return [{json: {url: '', bucket: '0', companyCount: 0, noUrls: true}}];\n}\n\nreturn urls.map(u => ({json: u}));"
       }
     },
     {
@@ -131,7 +154,10 @@
       "name": "Loop Over URLs",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [1000, -200],
+      "position": [
+        1000,
+        -200
+      ],
       "parameters": {
         "options": {}
       }
@@ -141,7 +167,10 @@
       "name": "Wait Between Searches",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [1200, 0],
+      "position": [
+        1200,
+        0
+      ],
       "parameters": {
         "amount": 3
       }
@@ -151,7 +180,10 @@
       "name": "Fetch Search Page",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1400, 0],
+      "position": [
+        1400,
+        0
+      ],
       "parameters": {
         "url": "={{ $json.url }}",
         "options": {
@@ -165,7 +197,10 @@
       "name": "Extract Links & Titles",
       "type": "n8n-nodes-base.html",
       "typeVersion": 1.2,
-      "position": [1600, 0],
+      "position": [
+        1600,
+        0
+      ],
       "parameters": {
         "options": {},
         "operation": "extractHtmlContent",
@@ -206,7 +241,10 @@
       "name": "Filter Links",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1800, 0],
+      "position": [
+        1800,
+        0
+      ],
       "parameters": {
         "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst foundLinks = staticData.foundJobLinks || [];\n\nconst currentBucket = $('Loop Over URLs').first().json.bucket || '0';\n\nconst data = $input.first().json;\nconst links = data.links || [];\nconst titles = data.titles || [];\nconst companies = data.companies || [];\nconst locations = data.locations || [];\n\n// ============================================================\n// NEGATIVE TITLE FILTER (same as main workflow)\n// ============================================================\nconst negativeBase = /\\b(staff|principal|lead|manager|director|ios|android|machine.?learning|data.?scien|QA|SDET|devops|SRE|site.?reliability|frontend|front.?end|intern|test.?engineer|test.?auto|platform.?engineer|infra.?engineer|cloud.?engineer|security|mobile|embedded)\\b/i;\nconst negativeSenior = /\\b(senior|sr\\.?)\\b/i;\n// ============================================================\n\nlet filtered = 0;\nlet duped = 0;\nlet added = 0;\n\nfor (let i = 0; i < links.length; i++) {\n  const url = links[i] || '';\n  const title = (titles[i] || '').trim();\n  const company = (companies[i] || '').trim();\n  const location = (locations[i] || '').trim();\n\n  // Extract job ID\n  const match = url.match(/-(\\d{8,})(?:\\?|$)/);\n  const jobId = match ? match[1] : null;\n  if (!jobId) continue;\n\n  // Dedup within this run only (no sheet dedup)\n  const alreadyFound = foundLinks.some(l => l.jobId === jobId);\n  if (alreadyFound) { duped++; continue; }\n\n  // Apply negative title filter\n  if (negativeBase.test(title)) { filtered++; continue; }\n\n  // For Bucket 1 & 2, also exclude 'senior'\n  if ((currentBucket === '1' || currentBucket === '2') && negativeSenior.test(title)) {\n    filtered++; continue;\n  }\n\n  foundLinks.push({\n    url: `https://www.linkedin.com/jobs/view/${jobId}`,\n    jobId: jobId,\n    bucket: currentBucket,\n    searchTitle: title,\n    searchCompany: company,\n    searchLocation: location\n  });\n  added++;\n}\n\nstaticData.foundJobLinks = foundLinks;\n\nconsole.log(`Bucket ${currentBucket}: ${links.length} total, ${added} new, ${duped} dupes, ${filtered} filtered`);\n\nreturn [{json: {processed: true, bucket: currentBucket, total: links.length, added: added, duped: duped, filtered: filtered}}];"
       }
@@ -216,7 +254,10 @@
       "name": "Output Job Links",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, -400],
+      "position": [
+        1200,
+        -400
+      ],
       "parameters": {
         "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst foundLinks = staticData.foundJobLinks || [];\n\nconsole.log(`Total job links found: ${foundLinks.length}`);\n\nif (foundLinks.length === 0) {\n  return [{json: {hasLinks: false, count: 0}}];\n}\n\n// Clear accumulator and initialize processed jobs array\nstaticData.foundJobLinks = [];\nstaticData.processedJobs = [];\n\n// Fan out individual links — first item carries hasLinks flag for the IF node\nreturn foundLinks.map((link, i) => ({json: {...link, hasLinks: true, count: foundLinks.length}}));"
       }
@@ -226,7 +267,10 @@
       "name": "Has Links?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1500, -400],
+      "position": [
+        1500,
+        -400
+      ],
       "parameters": {
         "options": {},
         "conditions": {
@@ -256,10 +300,13 @@
       "name": "Send No Results Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1800, -300],
+      "position": [
+        1800,
+        -300
+      ],
       "parameters": {
         "chatId": "={{ $('Parse Search Command').first().json.chatId }}",
-        "text": "={{ '\uD83D\uDD0D Jobs at ' + $('Lookup Company').first().json.matchedNames + ' (last ' + $('Parse Search Command').first().json.days + ' days)\\n\\nNo openings found in Bengaluru for this time period.' }}",
+        "text": "={{ '🔍 Jobs at ' + $('Lookup Company').first().json.matchedNames + ' (last ' + $('Parse Search Command').first().json.days + ' days)\\n\\nNo openings found in Bengaluru for this time period.' }}",
         "additionalFields": {
           "appendAttribution": false
         }
@@ -276,7 +323,10 @@
       "name": "Loop Over Jobs",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [1800, -500],
+      "position": [
+        1800,
+        -500
+      ],
       "parameters": {
         "options": {}
       }
@@ -286,7 +336,10 @@
       "name": "Wait Between Jobs",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [2000, -300],
+      "position": [
+        2000,
+        -300
+      ],
       "parameters": {
         "amount": 5
       }
@@ -296,7 +349,10 @@
       "name": "Fetch Job Detail",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2200, -300],
+      "position": [
+        2200,
+        -300
+      ],
       "parameters": {
         "url": "={{ $json.url }}",
         "options": {
@@ -310,7 +366,10 @@
       "name": "Parse Job Details",
       "type": "n8n-nodes-base.html",
       "typeVersion": 1.2,
-      "position": [2400, -300],
+      "position": [
+        2400,
+        -300
+      ],
       "parameters": {
         "options": {},
         "operation": "extractHtmlContent",
@@ -348,9 +407,12 @@
       "name": "Process Job",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2600, -300],
+      "position": [
+        2600,
+        -300
+      ],
       "parameters": {
-        "jsCode": "// ============================================================\n// SETTINGS — same threshold as main workflow\n// ============================================================\nconst MAX_EXPERIENCE_YEARS = parseInt($env.MAX_EXPERIENCE_YEARS || '4', 10); // Skip roles requiring more than this many years\nconst CITY_NAMES = ($env.LOCATION_CITY_NAMES || 'bengaluru,bangalore,karnataka').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);\n// ============================================================\n\nconst staticData = $getWorkflowStaticData('global');\nconst parsed = $input.first().json;\n\n// Get search data from the loop item\nlet searchData = {};\ntry {\n  searchData = $('Loop Over Jobs').first().json || {};\n} catch(e) {\n  searchData = {};\n}\n\nconst jobId = searchData.jobId || '';\nconst bucket = searchData.bucket || '';\nconst searchTitle = searchData.searchTitle || '';\nconst searchCompany = searchData.searchCompany || '';\n\nconst title = (parsed.title || searchTitle || '').trim();\nconst company = (parsed.company || searchCompany || '').trim();\nconst location = (parsed.location || searchData.searchLocation || '').trim();\nconst description = (parsed.description || '').replace(/\\s+/g, ' ').trim();\nconst criteria = parsed.criteria || [];\n\n// Experience extraction (same regex patterns as main workflow)\nlet expText = 'Not specified';\nlet minExp = null;\nlet maxExp = null;\n\nconst descLower = description.toLowerCase();\nconst expPatterns = [\n  /(\\d+)\\s*\\+\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*[-\\u2013to]+\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(?:minimum|at least|min\\.?)\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*(?:years|yrs)\\s*(?:of)?\\s*(?:experience|exp)/i\n];\n\nfor (const pattern of expPatterns) {\n  const match = descLower.match(pattern);\n  if (match) {\n    minExp = parseInt(match[1]);\n    maxExp = match[2] ? parseInt(match[2]) : null;\n    expText = match[0].trim();\n    break;\n  }\n}\n\nfor (const c of criteria) {\n  const cLower = (c || '').toLowerCase().trim();\n  if (cLower.includes('entry')) {\n    if (!minExp) { minExp = 0; expText = cLower; }\n  } else if (cLower.includes('mid-senior')) {\n    if (!minExp) { minExp = 3; expText = cLower; }\n  }\n}\n\n// ============================================================\n// FILTER: Skip locations outside the target cities\n// ============================================================\nconst locationLower = location.toLowerCase();\nconst isTargetCity = CITY_NAMES.some(c => locationLower.includes(c));\nif (location && !isTargetCity) {\n  console.log(`Skipping ${title} at ${company}: location outside target cities (${location})`);\n  return [{json: {processed: true, skipped: true, title: title, company: company, reason: 'wrong_location'}}];\n}\n\n// ============================================================\n// FILTER: Skip if experience requirement > threshold\n// ============================================================\nconst skipDueToExp = minExp !== null && minExp > MAX_EXPERIENCE_YEARS;\n\nif (skipDueToExp) {\n  console.log(`Skipping ${title} at ${company}: requires ${expText} (min ${minExp} yrs > ${MAX_EXPERIENCE_YEARS})`);\n  return [{json: {processed: true, skipped: true, title: title, company: company, reason: 'experience_too_high'}}];\n}\n\n// Format experience display\nlet expDisplay = 'Not specified';\nif (minExp !== null && maxExp !== null) {\n  expDisplay = `${minExp}-${maxExp} yrs`;\n} else if (minExp !== null) {\n  expDisplay = `${minExp}+ yrs`;\n}\n\n// Primary tag (same logic as main workflow)\nlet primaryTag = 'Generic';\nconst titleLower = title.toLowerCase();\nif (/sde.?(?:ii|2)/i.test(titleLower)) primaryTag = 'SDE-II';\nelse if (/software.*engineer.*(?:iii|3)/i.test(titleLower)) primaryTag = 'SE-III';\nelse if (/mts|member.*technical/i.test(titleLower)) primaryTag = 'MTS';\nelse if (/senior|sr/i.test(titleLower)) primaryTag = 'Senior';\nelse if (/backend|back.?end/i.test(titleLower)) primaryTag = 'Backend';\nelse primaryTag = 'Generic';\n\n// Accumulate processed jobs in static data (only valid ones reach here)\nif (!staticData.processedJobs) staticData.processedJobs = [];\nstaticData.processedJobs.push({\n  jobId: jobId,\n  title: title,\n  company: company,\n  location: location,\n  link: `https://www.linkedin.com/jobs/view/${jobId}`,\n  expDisplay: expDisplay,\n  primaryTag: primaryTag,\n  description: description.substring(0, 3000)\n});\n\nconsole.log(`Processed: ${title} at ${company} (${expDisplay}) [${primaryTag}]`);\n\nreturn [{json: {processed: true, skipped: false, title: title, company: company, expDisplay: expDisplay}}];"
+        "jsCode": "// ============================================================\n// SETTINGS — Settings tab > env var > hardcoded default, same as main workflow\n// ============================================================\nconst staticData = $getWorkflowStaticData('global');\nconst settings = staticData.settings || {};\n// min/max_experience_years together describe the experience bracket you're\n// targeting (e.g. \"3 to 5 years\"). A role matches if its own stated range\n// overlaps this bracket at all -- touching boundaries count as a match,\n// biased toward showing more roles rather than dropping borderline ones.\nconst MAX_EXPERIENCE_YEARS = parseInt((settings.max_experience_years || '').trim() || $env.MAX_EXPERIENCE_YEARS || '4', 10);\nconst MIN_EXPERIENCE_YEARS = parseInt((settings.min_experience_years || '').trim() || $env.MIN_EXPERIENCE_YEARS || '0', 10);\nconst CITY_NAMES = ((settings.location_city_names || '').trim() || $env.LOCATION_CITY_NAMES || 'bengaluru,bangalore,karnataka').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);\n// ============================================================\nconst parsed = $input.first().json;\n\n// Get search data from the loop item\nlet searchData = {};\ntry {\n  searchData = $('Loop Over Jobs').first().json || {};\n} catch(e) {\n  searchData = {};\n}\n\nconst jobId = searchData.jobId || '';\nconst bucket = searchData.bucket || '';\nconst searchTitle = searchData.searchTitle || '';\nconst searchCompany = searchData.searchCompany || '';\n\nconst title = (parsed.title || searchTitle || '').trim();\nconst company = (parsed.company || searchCompany || '').trim();\nconst location = (parsed.location || searchData.searchLocation || '').trim();\nconst description = (parsed.description || '').replace(/\\s+/g, ' ').trim();\nconst criteria = parsed.criteria || [];\n\n// Experience extraction (same regex patterns as main workflow)\nlet expText = 'Not specified';\nlet minExp = null;\nlet maxExp = null;\n\nconst descLower = description.toLowerCase();\nconst expPatterns = [\n  /(\\d+)\\s*\\+\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*[-\\u2013to]+\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(?:minimum|at least|min\\.?)\\s*(\\d+)\\s*(?:years|yrs)/i,\n  /(\\d+)\\s*(?:years|yrs)\\s*(?:of)?\\s*(?:experience|exp)/i\n];\n\nfor (const pattern of expPatterns) {\n  const match = descLower.match(pattern);\n  if (match) {\n    minExp = parseInt(match[1]);\n    maxExp = match[2] ? parseInt(match[2]) : null;\n    expText = match[0].trim();\n    break;\n  }\n}\n\nfor (const c of criteria) {\n  const cLower = (c || '').toLowerCase().trim();\n  if (cLower.includes('entry')) {\n    if (!minExp) { minExp = 0; expText = cLower; }\n  } else if (cLower.includes('mid-senior')) {\n    if (!minExp) { minExp = 3; expText = cLower; }\n  }\n}\n\n// ============================================================\n// FILTER: Skip locations outside the target cities\n// ============================================================\nconst locationLower = location.toLowerCase();\nconst isTargetCity = CITY_NAMES.some(c => locationLower.includes(c));\nif (location && !isTargetCity) {\n  console.log(`Skipping ${title} at ${company}: location outside target cities (${location})`);\n  return [{json: {processed: true, skipped: true, title: title, company: company, reason: 'wrong_location'}}];\n}\n\n// ============================================================\n// FILTER: Skip if the job's stated range doesn't overlap\n// [MIN_EXPERIENCE_YEARS, MAX_EXPERIENCE_YEARS]. Open-ended roles (e.g.\n// \"3+ years\") have no parsed ceiling and always satisfy the upper-bound\n// side of the check. Only rejects when the job's experience actually\n// parsed to something -- unparseable roles always pass through unfiltered.\n// ============================================================\nlet skipDueToExpMismatch = false;\n\nif (minExp !== null || maxExp !== null) {\n  const jobMin = minExp !== null ? minExp : 0;\n  const jobMax = maxExp !== null ? maxExp : Infinity;\n  skipDueToExpMismatch = !(jobMin <= MAX_EXPERIENCE_YEARS && jobMax >= MIN_EXPERIENCE_YEARS);\n}\n\nif (skipDueToExpMismatch) {\n  console.log(`Skipping ${title} at ${company}: requires ${expText}, outside target range ${MIN_EXPERIENCE_YEARS}-${MAX_EXPERIENCE_YEARS} yrs`);\n  return [{json: {processed: true, skipped: true, title: title, company: company, reason: 'experience_out_of_range'}}];\n}\n\n// Format experience display\nlet expDisplay = 'Not specified';\nif (minExp !== null && maxExp !== null) {\n  expDisplay = `${minExp}-${maxExp} yrs`;\n} else if (minExp !== null) {\n  expDisplay = `${minExp}+ yrs`;\n}\n\n// Primary tag (same logic as main workflow)\nlet primaryTag = 'Generic';\nconst titleLower = title.toLowerCase();\nif (/sde.?(?:ii|2)/i.test(titleLower)) primaryTag = 'SDE-II';\nelse if (/software.*engineer.*(?:iii|3)/i.test(titleLower)) primaryTag = 'SE-III';\nelse if (/mts|member.*technical/i.test(titleLower)) primaryTag = 'MTS';\nelse if (/senior|sr/i.test(titleLower)) primaryTag = 'Senior';\nelse if (/backend|back.?end/i.test(titleLower)) primaryTag = 'Backend';\nelse primaryTag = 'Generic';\n\n// Accumulate processed jobs in static data (only valid ones reach here)\nif (!staticData.processedJobs) staticData.processedJobs = [];\nstaticData.processedJobs.push({\n  jobId: jobId,\n  title: title,\n  company: company,\n  location: location,\n  link: `https://www.linkedin.com/jobs/view/${jobId}`,\n  expDisplay: expDisplay,\n  primaryTag: primaryTag,\n  description: description.substring(0, 3000)\n});\n\nconsole.log(`Processed: ${title} at ${company} (${expDisplay}) [${primaryTag}]`);\n\nreturn [{json: {processed: true, skipped: false, title: title, company: company, expDisplay: expDisplay}}];"
       }
     },
     {
@@ -358,9 +420,12 @@
       "name": "Format Telegram",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2200, -700],
+      "position": [
+        2200,
+        -700
+      ],
       "parameters": {
-        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst jobs = staticData.processedJobs || [];\nconst safe = (t) => { if (!t) return ''; return String(t).split('_').join('-').split('*').join(''); };\nconst days = staticData.days || 7;\nconst matchedNames = $('Lookup Company').first().json.matchedNames || 'Unknown';\nconst llmFailed = staticData.llmFailed === true;\n\nconst MAX_LEN = 4000;\nconst messages = [];\n\nif (llmFailed || !jobs[0]?.matchPercentage) {\n  // ===== FALLBACK: plain format (same as before) =====\n  const header = `\\uD83D\\uDD0D Jobs at ${matchedNames} (last ${days} days)\\n\\nFound ${jobs.length} opening${jobs.length !== 1 ? 's' : ''} in Bengaluru:\\n\\n`;\n  const entries = [];\n  for (let i = 0; i < jobs.length; i++) {\n    const j = jobs[i];\n    const exp = j.expDisplay && j.expDisplay !== 'Not specified' ? ` (${j.expDisplay})` : '';\n    const tag = j.primaryTag ? ` (${j.primaryTag})` : '';\n    let entry = `${i+1}. ${safe(j.company)} \\u2014 ${safe(j.title)}${exp}${tag}\\n`;\n    entry += `   \\uD83D\\uDCCD ${safe(j.location || 'N/A')}\\n`;\n    entry += `   ${j.link}`;\n    entries.push(entry);\n  }\n  let current = header;\n  for (const entry of entries) {\n    if (current.length + entry.length + 2 > MAX_LEN) {\n      messages.push(current.trim());\n      current = '...contd\\n\\n';\n    }\n    current += entry + '\\n\\n';\n  }\n  if (current.trim()) messages.push(current.trim());\n  // Append fallback warning to last message\n  if (messages.length > 0) {\n    messages[messages.length - 1] += '\\n\\n\\u26A0\\uFE0F AI matching unavailable this run.';\n  }\n} else {\n  // ===== ENRICHED: with match %, color coding, sorted by match =====\n  const header = `\\uD83D\\uDD0D Jobs at ${matchedNames} (last ${days} days) \\u2014 ${jobs.length} opening${jobs.length !== 1 ? 's' : ''}\\n\\n`;\n  const entries = [];\n  for (let i = 0; i < jobs.length; i++) {\n    const j = jobs[i];\n    const pct = j.matchPercentage != null ? j.matchPercentage : 'N/A';\n    let icon = '\\uD83D\\uDD34'; // red < 50\n    if (typeof pct === 'number') {\n      if (pct >= 70) icon = '\\uD83D\\uDFE2'; // green\n      else if (pct >= 50) icon = '\\uD83D\\uDFE1'; // yellow\n    }\n    const exp = j.expDisplay && j.expDisplay !== 'Not specified' ? ` (${j.expDisplay})` : '';\n    const tag = j.primaryTag ? ` (${j.primaryTag})` : '';\n    let entry = `${i+1}. ${icon} ${pct}% \\u2014 ${safe(j.title)}${exp}${tag}\\n`;\n    entry += `   \\uD83D\\uDCCD ${safe(j.location || 'N/A')}\\n`;\n    entry += `   \\uD83D\\uDD17 ${j.link}`;\n    entries.push(entry);\n  }\n  let current = header;\n  for (const entry of entries) {\n    if (current.length + entry.length + 2 > MAX_LEN) {\n      messages.push(current.trim());\n      current = '...contd\\n\\n';\n    }\n    current += entry + '\\n\\n';\n  }\n  if (current.trim()) messages.push(current.trim());\n}\n\n// Clean up static data if LLM failed (Format Email won't run to clean up)\nif (llmFailed) {\n  delete staticData.processedJobs;\n  delete staticData.llmFailed;\n}\n\nconsole.log(`Formatted ${jobs.length} jobs into ${messages.length} message(s), llmFailed=${llmFailed}`);\n\nreturn [{json: {messages: messages, count: jobs.length, llmFailed: llmFailed}}];"
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst allJobs = staticData.processedJobs || [];\nconst safe = (t) => { if (!t) return ''; return String(t).split('_').join('-').split('*').join(''); };\nconst days = staticData.days || 7;\nconst matchedNames = $('Lookup Company').first().json.matchedNames || 'Unknown';\nconst llmFailed = staticData.llmFailed === true;\nconst settings = staticData.settings || {};\nconst MIN_MATCH_PERCENT = parseInt((settings.min_match_percent || '').trim() || $env.MIN_MATCH_PERCENT || '0', 10);\nconst hasScores = !llmFailed && allJobs.length > 0 && allJobs[0] && allJobs[0].matchPercentage != null;\nconst jobs = hasScores ? allJobs.filter(j => j.matchPercentage == null || j.matchPercentage >= MIN_MATCH_PERCENT) : allJobs;\n\nconst MAX_LEN = 4000;\nconst messages = [];\n\nif (llmFailed || !hasScores) {\n  // ===== FALLBACK: plain format (same as before) =====\n  const header = `\\uD83D\\uDD0D Jobs at ${matchedNames} (last ${days} days)\\n\\nFound ${allJobs.length} opening${allJobs.length !== 1 ? 's' : ''} in Bengaluru:\\n\\n`;\n  const entries = [];\n  for (let i = 0; i < jobs.length; i++) {\n    const j = jobs[i];\n    const exp = j.expDisplay && j.expDisplay !== 'Not specified' ? ` (${j.expDisplay})` : '';\n    const tag = j.primaryTag ? ` (${j.primaryTag})` : '';\n    let entry = `${i+1}. ${safe(j.company)} \\u2014 ${safe(j.title)}${exp}${tag}\\n`;\n    entry += `   \\uD83D\\uDCCD ${safe(j.location || 'N/A')}\\n`;\n    entry += `   ${j.link}`;\n    entries.push(entry);\n  }\n  let current = header;\n  for (const entry of entries) {\n    if (current.length + entry.length + 2 > MAX_LEN) {\n      messages.push(current.trim());\n      current = '...contd\\n\\n';\n    }\n    current += entry + '\\n\\n';\n  }\n  if (current.trim()) messages.push(current.trim());\n  // Append fallback warning to last message\n  if (messages.length > 0) {\n    messages[messages.length - 1] += '\\n\\n\\u26A0\\uFE0F AI matching unavailable this run.';\n  }\n} else if (jobs.length === 0) {\n  messages.push(`Found ${allJobs.length} opening${allJobs.length !== 1 ? 's' : ''} at ${matchedNames}, but none met your minimum match threshold of ${MIN_MATCH_PERCENT}%. Lower min_match_percent in the Settings tab to see them.`);\n} else {\n  // ===== ENRICHED: with match %, color coding, sorted by match =====\n  const header = `\\uD83D\\uDD0D Jobs at ${matchedNames} (last ${days} days) \\u2014 ${jobs.length} opening${jobs.length !== 1 ? 's' : ''}\\n\\n`;\n  const entries = [];\n  for (let i = 0; i < jobs.length; i++) {\n    const j = jobs[i];\n    const pct = j.matchPercentage != null ? j.matchPercentage : 'N/A';\n    let icon = '\\uD83D\\uDD34'; // red < 50\n    if (typeof pct === 'number') {\n      if (pct >= 70) icon = '\\uD83D\\uDFE2'; // green\n      else if (pct >= 50) icon = '\\uD83D\\uDFE1'; // yellow\n    }\n    const exp = j.expDisplay && j.expDisplay !== 'Not specified' ? ` (${j.expDisplay})` : '';\n    const tag = j.primaryTag ? ` (${j.primaryTag})` : '';\n    let entry = `${i+1}. ${icon} ${pct}% \\u2014 ${safe(j.title)}${exp}${tag}\\n`;\n    entry += `   \\uD83D\\uDCCD ${safe(j.location || 'N/A')}\\n`;\n    entry += `   \\uD83D\\uDD17 ${j.link}`;\n    entries.push(entry);\n  }\n  let current = header;\n  for (const entry of entries) {\n    if (current.length + entry.length + 2 > MAX_LEN) {\n      messages.push(current.trim());\n      current = '...contd\\n\\n';\n    }\n    current += entry + '\\n\\n';\n  }\n  if (current.trim()) messages.push(current.trim());\n}\n\n// Clean up static data if LLM failed (Format Email won't run to clean up)\nif (llmFailed) {\n  delete staticData.processedJobs;\n  delete staticData.llmFailed;\n}\n\nconsole.log(`Formatted ${jobs.length} jobs into ${messages.length} message(s), llmFailed=${llmFailed}`);\n\nreturn [{json: {messages: messages, count: jobs.length, llmFailed: llmFailed}}];"
       }
     },
     {
@@ -368,7 +433,10 @@
       "name": "Split Messages",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2500, -700],
+      "position": [
+        2500,
+        -700
+      ],
       "parameters": {
         "jsCode": "const data = $input.first().json;\nconst messages = data.messages || [];\n\nreturn messages.map(msg => ({\n  json: { message: msg }\n}));"
       }
@@ -378,7 +446,10 @@
       "name": "Send Results Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [2800, -700],
+      "position": [
+        2800,
+        -700
+      ],
       "parameters": {
         "chatId": "={{ $('Parse Search Command').first().json.chatId }}",
         "text": "={{ $json.message }}",
@@ -398,7 +469,10 @@
       "name": "Read Resume",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.6,
-      "position": [2600, -700],
+      "position": [
+        2600,
+        -700
+      ],
       "parameters": {
         "options": {},
         "sheetName": {
@@ -426,7 +500,10 @@
       "name": "Prepare LLM Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2900, -700],
+      "position": [
+        2900,
+        -700
+      ],
       "parameters": {
         "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst resumeRows = $input.all().map(i => i.json);\nconst jobs = staticData.processedJobs || [];\n\n// Build resume object from key-value rows\nconst resume = {};\nfor (const row of resumeRows) {\n  const key = String(row.Key || '').trim();\n  const value = String(row.Value || '').trim();\n  if (key) resume[key] = value;\n}\n\n// Check if resume data is available\nif (Object.keys(resume).length === 0 || !resume.name) {\n  console.log('Resume tab is empty or missing — skipping LLM matching');\n  staticData.llmFailed = true;\n  return [{json: {llmRequired: false, reason: 'resume_empty'}}];\n}\n\nif (jobs.length === 0) {\n  console.log('No jobs to match — skipping LLM');\n  staticData.llmFailed = true;\n  return [{json: {llmRequired: false, reason: 'no_jobs'}}];\n}\n\n// Build jobs array for LLM (truncate descriptions)\nconst jobsForLLM = jobs.map(j => ({\n  jobId: j.jobId,\n  title: j.title,\n  company: j.company,\n  location: j.location,\n  description: (j.description || '').substring(0, 3000),\n  experienceReq: j.expDisplay,\n  primaryTag: j.primaryTag\n}));\n\nconst inputJson = JSON.stringify({resume, jobs: jobsForLLM}, null, 2);\n\nconst prompt = `You are a job-resume matching assistant. Given a candidate's resume and a list of job postings, analyze how well the candidate matches each role.\n\n## Candidate Resume\n${JSON.stringify(resume, null, 2)}\n\n## Job Listings\n${JSON.stringify(jobsForLLM, null, 2)}\n\n## Instructions\nFor each job in the jobs array:\n1. Compare the job requirements against the candidate's resume\n2. Calculate an honest match percentage based on: skills overlap (40%), experience level fit (30%), domain relevance (20%), and role seniority alignment (10%)\n3. Write a one-line summary of what the role involves (max 100 characters)\n4. List 2-4 key skills/experiences from the resume that match the job requirements\n5. List 1-3 key skills/requirements the candidate is missing or weak on\n\n## Scoring Guidelines\n- 85-100%: Excellent match — skills, experience level, and domain align closely\n- 70-84%: Strong match — most key requirements met, minor gaps\n- 50-69%: Moderate match — relevant foundation but notable gaps\n- 30-49%: Weak match — limited overlap, significant upskilling needed\n- 0-29%: Poor match — fundamentally different domain or seniority\n\n## Output Format\nReturn ONLY a valid JSON object. No markdown, no explanation, no text before or after.\n{\n  \"results\": [\n    {\n      \"jobId\": \"<same jobId from input>\",\n      \"matchPercentage\": <integer 0-100>,\n      \"summary\": \"<what the role does, max 100 chars>\",\n      \"keyMatches\": [\"<matching skill>\", \"<matching skill>\"],\n      \"keyGaps\": [\"<missing requirement>\", \"<missing requirement>\"]\n    }\n  ]\n}\n\nRULES:\n- Return results for ALL jobs in the input, in the same order\n- Each jobId MUST match a jobId from the input exactly\n- matchPercentage MUST be an integer between 0 and 100\n- summary MUST be under 100 characters\n- keyMatches: 2-4 items\n- keyGaps: 1-3 items\n- Do NOT fabricate skills the candidate doesn't have\n- Do NOT add any text outside the JSON object`;\n\nconsole.log(`Prepared LLM input: ${jobs.length} jobs, resume keys: ${Object.keys(resume).join(', ')}`);\n\nreturn [{json: {\n  llmRequired: true,\n  prompt: prompt,\n  jobCount: jobs.length\n}}];"
       }
@@ -436,7 +513,10 @@
       "name": "Call Gemini Flash",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3200, -700],
+      "position": [
+        3200,
+        -700
+      ],
       "parameters": {
         "method": "POST",
         "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{ $env.GEMINI_API_KEY }}",
@@ -454,7 +534,10 @@
       "name": "Parse LLM Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3500, -700],
+      "position": [
+        3500,
+        -700
+      ],
       "parameters": {
         "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst jobs = staticData.processedJobs || [];\nconst response = $input.first().json;\n\n// Check if LLM was skipped\nif (response.llmRequired === false) {\n  console.log('LLM was skipped: ' + (response.reason || 'unknown'));\n  staticData.llmFailed = true;\n  return [{json: {llmFailed: true, reason: response.reason}}];\n}\n\ntry {\n  // Check for API error\n  if (response.error || !response.candidates || !response.candidates[0]) {\n    const errMsg = response.error?.message || 'No candidates in response';\n    console.log('Gemini API error: ' + errMsg);\n    staticData.llmFailed = true;\n    return [{json: {llmFailed: true, reason: 'api_error', error: errMsg}}];\n  }\n\n  const text = response.candidates[0].content?.parts?.[0]?.text || '';\n  if (!text) {\n    console.log('Empty response text from Gemini');\n    staticData.llmFailed = true;\n    return [{json: {llmFailed: true, reason: 'empty_response'}}];\n  }\n\n  // Parse JSON response\n  const parsed = JSON.parse(text);\n  const results = parsed.results || [];\n\n  if (!Array.isArray(results) || results.length === 0) {\n    console.log('No results array in LLM response');\n    staticData.llmFailed = true;\n    return [{json: {llmFailed: true, reason: 'no_results_array'}}];\n  }\n\n  // Build lookup by jobId\n  const resultMap = {};\n  for (const r of results) {\n    if (r.jobId) resultMap[r.jobId] = r;\n  }\n\n  // Merge LLM results into processedJobs\n  for (const job of jobs) {\n    const match = resultMap[job.jobId];\n    if (match) {\n      job.matchPercentage = typeof match.matchPercentage === 'number' ?\n        Math.max(0, Math.min(100, Math.round(match.matchPercentage))) : null;\n      job.summary = (match.summary || '').substring(0, 100);\n      job.keyMatches = Array.isArray(match.keyMatches) ? match.keyMatches.slice(0, 4) : [];\n      job.keyGaps = Array.isArray(match.keyGaps) ? match.keyGaps.slice(0, 3) : [];\n    } else {\n      // Job not in LLM results — mark as N/A\n      job.matchPercentage = null;\n      job.summary = '';\n      job.keyMatches = [];\n      job.keyGaps = [];\n    }\n  }\n\n  // Sort by matchPercentage descending (nulls at end)\n  jobs.sort((a, b) => {\n    const aP = a.matchPercentage != null ? a.matchPercentage : -1;\n    const bP = b.matchPercentage != null ? b.matchPercentage : -1;\n    return bP - aP;\n  });\n\n  staticData.processedJobs = jobs;\n  staticData.llmFailed = false;\n\n  console.log(`LLM matching complete: ${results.length} results merged into ${jobs.length} jobs`);\n  return [{json: {llmFailed: false, matchedCount: results.length, jobCount: jobs.length}}];\n\n} catch (e) {\n  console.log('LLM response parse error: ' + e.message);\n  staticData.llmFailed = true;\n  return [{json: {llmFailed: true, reason: 'parse_error', error: e.message}}];\n}"
       }
@@ -464,7 +547,10 @@
       "name": "LLM Succeeded?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [3400, -1000],
+      "position": [
+        3400,
+        -1000
+      ],
       "parameters": {
         "options": {},
         "conditions": {
@@ -494,9 +580,12 @@
       "name": "Format Email",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3700, -1100],
+      "position": [
+        3700,
+        -1100
+      ],
       "parameters": {
-        "jsCode": "var staticData = $getWorkflowStaticData('global');\nvar jobs = staticData.processedJobs || [];\nvar days = staticData.days || 7;\nvar matchedNames = $('Lookup Company').first().json.matchedNames || 'Unknown';\n\nvar subject = matchedNames + ' \\u2014 ' + jobs.length + (jobs.length !== 1 ? ' matches' : ' match') + ' found';\n\nfunction badgeStyle(pct) {\n  if (typeof pct !== 'number') return 'background:#f1f3f4;color:#5f6368;';\n  if (pct >= 70) return 'background:#e8f5e9;color:#1b5e20;';\n  if (pct >= 50) return 'background:#fff8e1;color:#e65100;';\n  return 'background:#fce4ec;color:#b71c1c;';\n}\n\nvar cards = '';\nfor (var i = 0; i < jobs.length; i++) {\n  var j = jobs[i];\n  var pct = j.matchPercentage;\n  var pctDisplay = typeof pct === 'number' ? pct + '%' : 'N/A';\n  var bStyle = badgeStyle(pct);\n  var exp = j.expDisplay && j.expDisplay !== 'Not specified' ? ' \\u00B7 ' + j.expDisplay : '';\n\n  var matchChips = (j.keyMatches || []).map(function(m) {\n    return '<span style=\"display:inline-block;background:#e8f0fe;color:#1967d2;font-size:11px;padding:4px 10px;border-radius:8px;margin:0 4px 6px 0;font-weight:500;\">' + m + '</span>';\n  }).join('');\n\n  var gapChips = (j.keyGaps || []).map(function(g) {\n    return '<span style=\"display:inline-block;background:#f1f3f4;color:#5f6368;font-size:11px;padding:4px 10px;border-radius:8px;margin:0 4px 6px 0;\">' + g + '</span>';\n  }).join('');\n\n  cards += '<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#ffffff;border-radius:12px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08),0 4px 12px rgba(0,0,0,0.06);\">';\n  cards += '<tr><td style=\"padding:16px 18px;\">';\n  cards += '<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr>';\n  cards += '<td><a href=\"' + j.link + '\" target=\"_blank\" style=\"color:#1a73e8;font-size:15px;font-weight:600;text-decoration:none;line-height:1.3;\">' + j.title + '</a></td>';\n  cards += '<td align=\"right\" width=\"72\" style=\"vertical-align:top;\"><div style=\"' + bStyle + 'font-size:12px;font-weight:700;padding:4px 0;border-radius:8px;text-align:center;\">' + pctDisplay + '</div></td>';\n  cards += '</tr></table>';\n  cards += '<div style=\"font-size:12px;color:#5f6368;margin-top:6px;\">' + (j.location || 'N/A') + exp + '</div>';\n  if (j.summary) {\n    cards += '<div style=\"font-size:13px;color:#3c4043;margin-top:8px;line-height:1.45;\">' + j.summary + '</div>';\n  }\n  if (matchChips) {\n    cards += '<div style=\"margin-top:12px;\">' + matchChips + '</div>';\n  }\n  if (gapChips) {\n    cards += '<div style=\"margin-top:2px;\">' + gapChips + '</div>';\n  }\n  cards += '</td></tr></table>';\n}\n\nvar html = '<div style=\"max-width:520px;margin:0 auto;padding:16px;font-family:Segoe UI,-apple-system,BlinkMacSystemFont,Roboto,sans-serif;\">';\nhtml += '<div style=\"padding:4px 0 16px 0;\">';\nhtml += '<div style=\"font-size:28px;font-weight:700;color:#202124;letter-spacing:-0.5px;\">' + matchedNames + '</div>';\nhtml += '<div style=\"font-size:13px;color:#5f6368;margin-top:4px;\">' + jobs.length + (jobs.length !== 1 ? ' openings' : ' opening') + ' \\u00B7 Last ' + days + (days !== 1 ? ' days' : ' day') + ' \\u00B7 Bengaluru</div>';\nhtml += '</div>';\nhtml += '<div style=\"border-top:1px solid #e0e0e0;margin-bottom:16px;\"></div>';\nhtml += cards;\nhtml += '<div style=\"text-align:center;padding:16px 0;color:#9aa0a6;font-size:11px;\">n8n /search workflow</div>';\nhtml += '</div>';\n\ndelete staticData.processedJobs;\ndelete staticData.llmFailed;\n\nconsole.log('Email formatted: ' + subject + ', ' + jobs.length + ' jobs');\n\nreturn [{json: {subject: subject, html: html}}];"
+        "jsCode": "var staticData = $getWorkflowStaticData('global');\nvar allJobs = staticData.processedJobs || [];\nvar days = staticData.days || 7;\nvar matchedNames = $('Lookup Company').first().json.matchedNames || 'Unknown';\nvar settings = staticData.settings || {};\nvar MIN_MATCH_PERCENT = parseInt((settings.min_match_percent || '').trim() || $env.MIN_MATCH_PERCENT || '0', 10);\n// Below-threshold jobs are hidden from the email only, same as Format Telegram --\n// this workflow is stateless, so there's no separate 'marked notified' list to keep in sync.\nvar jobs = allJobs.filter(function(j) { return j.matchPercentage == null || j.matchPercentage >= MIN_MATCH_PERCENT; });\n\nvar subject = matchedNames + ' \\u2014 ' + jobs.length + (jobs.length !== 1 ? ' matches' : ' match') + ' found';\n\nfunction badgeStyle(pct) {\n  if (typeof pct !== 'number') return 'background:#f1f3f4;color:#5f6368;';\n  if (pct >= 70) return 'background:#e8f5e9;color:#1b5e20;';\n  if (pct >= 50) return 'background:#fff8e1;color:#e65100;';\n  return 'background:#fce4ec;color:#b71c1c;';\n}\n\nvar cards = '';\nfor (var i = 0; i < jobs.length; i++) {\n  var j = jobs[i];\n  var pct = j.matchPercentage;\n  var pctDisplay = typeof pct === 'number' ? pct + '%' : 'N/A';\n  var bStyle = badgeStyle(pct);\n  var exp = j.expDisplay && j.expDisplay !== 'Not specified' ? ' \\u00B7 ' + j.expDisplay : '';\n\n  var matchChips = (j.keyMatches || []).map(function(m) {\n    return '<span style=\"display:inline-block;background:#e8f0fe;color:#1967d2;font-size:11px;padding:4px 10px;border-radius:8px;margin:0 4px 6px 0;font-weight:500;\">' + m + '</span>';\n  }).join('');\n\n  var gapChips = (j.keyGaps || []).map(function(g) {\n    return '<span style=\"display:inline-block;background:#f1f3f4;color:#5f6368;font-size:11px;padding:4px 10px;border-radius:8px;margin:0 4px 6px 0;\">' + g + '</span>';\n  }).join('');\n\n  cards += '<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#ffffff;border-radius:12px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08),0 4px 12px rgba(0,0,0,0.06);\">';\n  cards += '<tr><td style=\"padding:16px 18px;\">';\n  cards += '<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr>';\n  cards += '<td><a href=\"' + j.link + '\" target=\"_blank\" style=\"color:#1a73e8;font-size:15px;font-weight:600;text-decoration:none;line-height:1.3;\">' + j.title + '</a></td>';\n  cards += '<td align=\"right\" width=\"72\" style=\"vertical-align:top;\"><div style=\"' + bStyle + 'font-size:12px;font-weight:700;padding:4px 0;border-radius:8px;text-align:center;\">' + pctDisplay + '</div></td>';\n  cards += '</tr></table>';\n  cards += '<div style=\"font-size:12px;color:#5f6368;margin-top:6px;\">' + (j.location || 'N/A') + exp + '</div>';\n  if (j.summary) {\n    cards += '<div style=\"font-size:13px;color:#3c4043;margin-top:8px;line-height:1.45;\">' + j.summary + '</div>';\n  }\n  if (matchChips) {\n    cards += '<div style=\"margin-top:12px;\">' + matchChips + '</div>';\n  }\n  if (gapChips) {\n    cards += '<div style=\"margin-top:2px;\">' + gapChips + '</div>';\n  }\n  cards += '</td></tr></table>';\n}\n\nvar html = '<div style=\"max-width:520px;margin:0 auto;padding:16px;font-family:Segoe UI,-apple-system,BlinkMacSystemFont,Roboto,sans-serif;\">';\nhtml += '<div style=\"padding:4px 0 16px 0;\">';\nhtml += '<div style=\"font-size:28px;font-weight:700;color:#202124;letter-spacing:-0.5px;\">' + matchedNames + '</div>';\nhtml += '<div style=\"font-size:13px;color:#5f6368;margin-top:4px;\">' + jobs.length + (jobs.length !== 1 ? ' openings' : ' opening') + ' \\u00B7 Last ' + days + (days !== 1 ? ' days' : ' day') + ' \\u00B7 Bengaluru</div>';\nif (allJobs.length > jobs.length) {\n  html += '<div style=\"font-size:12px;color:#9aa0a6;margin-top:2px;\">' + (allJobs.length - jobs.length) + ' more below your ' + MIN_MATCH_PERCENT + '% match threshold (not shown) \\u2014 see Telegram or lower min_match_percent in the Settings tab</div>';\n}\nhtml += '</div>';\nhtml += '<div style=\"border-top:1px solid #e0e0e0;margin-bottom:16px;\"></div>';\nhtml += cards;\nhtml += '<div style=\"text-align:center;padding:16px 0;color:#9aa0a6;font-size:11px;\">n8n /search workflow</div>';\nhtml += '</div>';\n\ndelete staticData.processedJobs;\ndelete staticData.llmFailed;\n\nconsole.log('Email formatted: ' + subject + ', ' + jobs.length + ' jobs');\n\nreturn [{json: {subject: subject, html: html}}];"
       }
     },
     {
@@ -504,7 +593,10 @@
       "name": "Send Gmail",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [4000, -1100],
+      "position": [
+        4000,
+        -1100
+      ],
       "parameters": {
         "sendTo": "CONFIGURE_ME@example.com",
         "subject": "={{ $json.subject }}",
@@ -524,7 +616,10 @@
       "name": "Sticky Note - Trigger",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-880, -120],
+      "position": [
+        -880,
+        -120
+      ],
       "parameters": {
         "width": 300,
         "height": 300,
@@ -537,7 +632,10 @@
       "name": "Sticky Note - Search Loop",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [900, 80],
+      "position": [
+        900,
+        80
+      ],
       "parameters": {
         "width": 1000,
         "height": 180,
@@ -550,7 +648,10 @@
       "name": "Sticky Note - Job Processing",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [1900, -120],
+      "position": [
+        1900,
+        -120
+      ],
       "parameters": {
         "width": 800,
         "height": 180,
@@ -563,154 +664,410 @@
       "name": "Sticky Note - LLM Matching",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [2500, -880],
+      "position": [
+        2500,
+        -880
+      ],
       "parameters": {
         "width": 1600,
         "height": 180,
         "color": 5,
         "content": "## LLM Resume Matching\nAfter job loop: Read Resume tab → build prompt → Call Gemini Flash API → parse match scores → Format Telegram (enriched with match %) → send. If LLM fails: fallback to plain format + ⚠️ warning. If LLM succeeds: also send detailed Gmail with summaries, key matches, and gaps."
       }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
+          "cachedResultName": "Your Google Sheet"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Settings",
+          "cachedResultName": "Settings"
+        },
+        "options": {}
+      },
+      "id": "b2000001-0001-0001-0001-000000000030",
+      "name": "Read Settings",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -200,
+        200
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURE_ME",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store Settings tab key/value rows in workflow static data (Config-tab-driven\n// filters: location/experience-range/match-threshold), same pattern as the\n// main job-search workflow. If the Settings tab is empty/missing rows, this\n// leaves staticData.settings = {}, and every consumer below falls back to\n// its env var then hardcoded default -- an empty Settings tab is not an error.\nconst staticData = $getWorkflowStaticData('global');\nconst rows = $input.all().map(i => i.json);\n\nconst settings = {};\nfor (const r of rows) {\n  const key = String(r.Key || '').trim();\n  const value = String(r.Value || '').trim();\n  if (key) settings[key] = value;\n}\nstaticData.settings = settings;\n\nif (rows.length > 0 && Object.keys(settings).length === 0) {\n  console.log(\"WARNING: Settings tab has \" + rows.length + \" row(s) but none had a recognizable Key column -- \" +\n    \"the sheet's row 1 must be literally 'Key' and 'Value' (exact spelling/case), not the first data pair. \" +\n    \"Every setting is currently falling back to its env var / hardcoded default. Row 1 as read: \" + JSON.stringify(Object.keys(rows[0] || {})));\n}\n\nconsole.log(`Settings loaded: ${Object.keys(settings).length} keys`);\n\nreturn [{json: {settingsLoaded: true, keys: Object.keys(settings)}}];"
+      },
+      "id": "b2000001-0001-0001-0001-000000000031",
+      "name": "Store Settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -70,
+        200
+      ]
     }
   ],
   "connections": {
     "Telegram Trigger": {
       "main": [
-        [{"node": "Parse Search Command", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Parse Search Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Parse Search Command": {
       "main": [
-        [{"node": "Read Config", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Read Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Read Config": {
       "main": [
-        [{"node": "Lookup Company", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Read Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Lookup Company": {
       "main": [
-        [{"node": "Company Found?", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Company Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Company Found?": {
       "main": [
-        [{"node": "Build Search URL", "type": "main", "index": 0}],
-        [{"node": "Send Error Telegram", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Build Search URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Search URL": {
       "main": [
-        [{"node": "Loop Over URLs", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Loop Over URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Loop Over URLs": {
       "main": [
-        [{"node": "Output Job Links", "type": "main", "index": 0}],
-        [{"node": "Wait Between Searches", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Output Job Links",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait Between Searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Wait Between Searches": {
       "main": [
-        [{"node": "Fetch Search Page", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Fetch Search Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Fetch Search Page": {
       "main": [
-        [{"node": "Extract Links & Titles", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Extract Links & Titles",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Extract Links & Titles": {
       "main": [
-        [{"node": "Filter Links", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Filter Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Filter Links": {
       "main": [
-        [{"node": "Loop Over URLs", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Loop Over URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Output Job Links": {
       "main": [
-        [{"node": "Has Links?", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Has Links?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Has Links?": {
       "main": [
-        [{"node": "Loop Over Jobs", "type": "main", "index": 0}],
-        [{"node": "Send No Results Telegram", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Loop Over Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send No Results Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Loop Over Jobs": {
       "main": [
-        [{"node": "Read Resume", "type": "main", "index": 0}],
-        [{"node": "Wait Between Jobs", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Read Resume",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait Between Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Wait Between Jobs": {
       "main": [
-        [{"node": "Fetch Job Detail", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Fetch Job Detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Fetch Job Detail": {
       "main": [
-        [{"node": "Parse Job Details", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Parse Job Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Parse Job Details": {
       "main": [
-        [{"node": "Process Job", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Process Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Process Job": {
       "main": [
-        [{"node": "Loop Over Jobs", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Loop Over Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Read Resume": {
       "main": [
-        [{"node": "Prepare LLM Input", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Prepare LLM Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Prepare LLM Input": {
       "main": [
-        [{"node": "Call Gemini Flash", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Call Gemini Flash",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Call Gemini Flash": {
       "main": [
-        [{"node": "Parse LLM Response", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Parse LLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Parse LLM Response": {
       "main": [
-        [{"node": "Format Telegram", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Format Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Format Telegram": {
       "main": [
-        [{"node": "Split Messages", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Split Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Split Messages": {
       "main": [
-        [{"node": "Send Results Telegram", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Send Results Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Send Results Telegram": {
       "main": [
-        [{"node": "LLM Succeeded?", "type": "main", "index": 0}]
+        [
+          {
+            "node": "LLM Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "LLM Succeeded?": {
       "main": [
-        [{"node": "Format Email", "type": "main", "index": 0}],
+        [
+          {
+            "node": "Format Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "Format Email": {
       "main": [
-        [{"node": "Send Gmail", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Send Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Settings": {
+      "main": [
+        [
+          {
+            "node": "Store Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Settings": {
+      "main": [
+        [
+          {
+            "node": "Lookup Company",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },

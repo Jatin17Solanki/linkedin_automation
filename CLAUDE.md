@@ -5,7 +5,7 @@ An n8n automation workflow (`n8n_job_search_v1.json`) that searches LinkedIn's p
 
 ## File Locations
 - **Main workflow:** `n8n_job_search_v1.json` — scheduled job search with LLM resume matching (37 functional nodes + 5 sticky notes)
-- **Company search:** `n8n_company_search_v1.json` — on-demand `/search` command with LLM resume matching (30 functional nodes + 4 sticky notes)
+- **Company search:** `n8n_company_search_v1.json` — on-demand `/search` command with LLM resume matching (32 functional nodes + 4 sticky notes)
 - **Job parser:** `n8n_job_parser_v1.json` — webhook API for parsing LinkedIn job pages (8 functional nodes + 1 sticky note)
 
 ## Architecture Overview
@@ -126,7 +126,7 @@ Regex: `/-(\d{8,})(?:\?|$)/` — extracts the numeric job ID from LinkedIn URLs 
 `min_experience_years`/`max_experience_years` together describe the experience bracket you're targeting (e.g. "3 to 5 years"). A role matches if its own stated range overlaps this bracket at all, touching boundaries counted as a match — a "2-4 years" posting matches a `3-5` target, and so does an open-ended "5+ years" posting (no ceiling to compare against, so it always satisfies the upper bound). Deliberately permissive: implemented in `Process & Filter Job` as `jobMin <= MAX_EXPERIENCE_YEARS && jobMax >= MIN_EXPERIENCE_YEARS` (jobMax = `Infinity` for open-ended roles), biased toward false positives over dropping borderline roles. Defaults (`min=0`, `max=4`) reproduce the original single-ceiling behavior exactly. Unparseable job experience always passes through regardless of the range (see "Honest filtering" below).
 | `min_match_percent` | `MIN_MATCH_PERCENT` | `0` (no suppression) |
 
-`min_match_percent` hides jobs scoring below the threshold from the Telegram message only — it does **not** affect whether they're written to the Results sheet or marked `Notified`; suppressed jobs are still marked notified (via the full, unfiltered job list in `Format Telegram`'s `jobIds`) so they're never re-scored on a later run. Only applies when Gemini scoring succeeded — the plain-fallback format (LLM failed) never suppresses, since there's no score to filter on. **Not currently implemented in `n8n_company_search_v1.json`** — a known gap, flagged for a follow-up pass to keep the two workflows' duplicated logic in sync (see `plan.md`'s "duplicated logic" decision).
+`min_match_percent` hides jobs scoring below the threshold from the Telegram message only — it does **not** affect whether they're written to the Results sheet or marked `Notified`; suppressed jobs are still marked notified (via the full, unfiltered job list in `Format Telegram`'s `jobIds`) so they're never re-scored on a later run. Only applies when Gemini scoring succeeded — the plain-fallback format (LLM failed) never suppresses, since there's no score to filter on. **Also implemented in `n8n_company_search_v1.json`** (both its Telegram message and Gmail digest — Gmail additionally notes how many roles were hidden, since it has more room than Telegram's char limit) — the two workflows' Settings-tab handling stays in sync per `plan.md`'s "duplicated logic" decision.
 
 Sheet Document ID: `YOUR_GOOGLE_SHEET_DOCUMENT_ID` (find yours in the Google Sheets URL after `/d/`)
 
@@ -387,11 +387,12 @@ A separate, stateless workflow (`n8n_company_search_v1.json`) for searching a sp
 ### Key Differences from Main Workflow
 | Feature | Main (`/jobs`) | Company Search (`/search`) |
 |---------|---------------|---------------------------|
-| Scope | All active companies | Single company (partial match) |
+| Scope | Only companies with `Active=TRUE` | Any company in Config, partial match — `Active` is **not** checked (an on-demand, deliberate lookup isn't gated by the flag that controls passive/scheduled inclusion) |
 | Time unit | Hours | Days (default 7) |
 | Dedup | Against Results sheet | Within-run only (no sheet dedup) |
 | Negative title filters | Same | Same (staff, QA, devops, etc.; senior for buckets 1 & 2) |
-| Experience filter | Same | Same (skips >4 yrs min) |
+| Experience filter | Same (Settings tab / env var, range-overlap match) | Same |
+| Location/match-threshold Settings | Same (Settings tab / env var) | Same |
 | Sheet writes | Appends to Results | None (stateless) |
 | Notification tracking | Marks Notified=TRUE | None |
 | LLM matching | Gemini Flash resume matching (match % in Telegram, Score in sheet) | Gemini Flash resume matching (match %, summary, gaps) + Gmail |
@@ -402,7 +403,8 @@ A separate, stateless workflow (`n8n_company_search_v1.json`) for searching a sp
 Telegram Trigger (/search)
   → Parse Search Command (company + days)
   → Read Config (Google Sheet)
-  → Lookup Company (case-insensitive partial match)
+  → Read Settings → Store Settings (location/experience-range/match-threshold)
+  → Lookup Company (case-insensitive partial match, regardless of Active status)
   → Company Found?
     ├─ NO → Send Error Telegram
     └─ YES → Build Search URL → Loop Over URLs
@@ -419,40 +421,42 @@ Telegram Trigger (/search)
         └─ NO → (end, no email)
 ```
 
-### Node Reference (30 functional nodes + 4 sticky notes)
+### Node Reference (32 functional nodes + 4 sticky notes)
 
 | # | Node Name | Type | Purpose |
 |---|-----------|------|---------|
 | 1 | Telegram Trigger | telegramTrigger | Listens for `/search` commands |
 | 2 | Parse Search Command | code | Extracts company name + days (default 7, clamped 1-90) |
 | 3 | Read Config | googleSheets | Reads Config tab (same sheet as main workflow) |
-| 4 | Lookup Company | code | Case-insensitive partial match against active companies |
-| 5 | Company Found? | if | Routes found/not-found |
-| 6 | Send Error Telegram | telegram | "Company not found" or "Invalid command" error |
-| 7 | Build Search URL | code | Builds LinkedIn URL using company's bucket keywords |
-| 8 | Loop Over URLs | splitInBatches | Handles multi-bucket partial matches |
-| 9 | Wait Between Searches | wait | 3s rate limit |
-| 10 | Fetch Search Page | httpRequest | LinkedIn search page, 30s timeout |
-| 11 | Extract Links & Titles | html | Same CSS selectors as main workflow |
-| 12 | Filter Links | code | Negative title filter + job ID extraction, no dedup |
-| 13 | Output Job Links | code | Fans out accumulated links or signals empty |
-| 14 | Has Links? | if | Routes to job processing or no-results message |
-| 15 | Send No Results Telegram | telegram | "No openings found in Bengaluru" |
-| 16 | Loop Over Jobs | splitInBatches | Iterates job detail fetches |
-| 17 | Wait Between Jobs | wait | 5s rate limit |
-| 18 | Fetch Job Detail | httpRequest | Individual job page, 30s timeout |
-| 19 | Parse Job Details | html | Same CSS selectors as main workflow |
-| 20 | Process Job | code | Experience extraction + tagging + saves description for LLM |
-| 21 | Format Telegram | code | Enriched format (match %, colors) or plain fallback |
-| 22 | Split Messages | code | Fans out message chunks |
-| 23 | Send Results Telegram | telegram | Sends result message(s) |
-| 24 | Read Resume | googleSheets | Reads "Resume" tab (Key/Value pairs) from same sheet |
-| 25 | Prepare LLM Input | code | Builds Gemini prompt with resume + job descriptions |
-| 26 | Call Gemini Flash | httpRequest | POST to Gemini 2.5 Flash API (60s timeout, continueOnFail) |
-| 27 | Parse LLM Response | code | Validates & merges match scores into jobs, sorts by match % |
-| 28 | LLM Succeeded? | if | Routes: LLM worked → email, LLM failed → end |
-| 29 | Format Email | code | Builds detailed email with summary, matches, gaps per job |
-| 30 | Send Gmail | gmail | Sends detailed results email |
+| 4 | Read Settings | googleSheets | Reads Settings tab (location/experience-range/match-threshold), same pattern as main workflow |
+| 5 | Store Settings | code | Parses Settings rows into `staticData.settings` |
+| 6 | Lookup Company | code | Case-insensitive partial match against **all** companies in Config — `Active` is not checked (see Key Differences above) |
+| 7 | Company Found? | if | Routes found/not-found |
+| 8 | Send Error Telegram | telegram | "Company not found" or "Invalid command" error |
+| 9 | Build Search URL | code | Builds LinkedIn URL using company's bucket keywords |
+| 10 | Loop Over URLs | splitInBatches | Handles multi-bucket partial matches |
+| 11 | Wait Between Searches | wait | 3s rate limit |
+| 12 | Fetch Search Page | httpRequest | LinkedIn search page, 30s timeout |
+| 13 | Extract Links & Titles | html | Same CSS selectors as main workflow |
+| 14 | Filter Links | code | Negative title filter + job ID extraction, no dedup |
+| 15 | Output Job Links | code | Fans out accumulated links or signals empty |
+| 16 | Has Links? | if | Routes to job processing or no-results message |
+| 17 | Send No Results Telegram | telegram | "No openings found in Bengaluru" |
+| 18 | Loop Over Jobs | splitInBatches | Iterates job detail fetches |
+| 19 | Wait Between Jobs | wait | 5s rate limit |
+| 20 | Fetch Job Detail | httpRequest | Individual job page, 30s timeout |
+| 21 | Parse Job Details | html | Same CSS selectors as main workflow |
+| 22 | Process Job | code | Experience-range extraction + tagging + saves description for LLM |
+| 23 | Format Telegram | code | Enriched format (match %, colors, `min_match_percent` suppression) or plain fallback |
+| 24 | Split Messages | code | Fans out message chunks |
+| 25 | Send Results Telegram | telegram | Sends result message(s) |
+| 26 | Read Resume | googleSheets | Reads "Resume" tab (Key/Value pairs) from same sheet |
+| 27 | Prepare LLM Input | code | Builds Gemini prompt with resume + job descriptions |
+| 28 | Call Gemini Flash | httpRequest | POST to Gemini 2.5 Flash API (60s timeout, continueOnFail) |
+| 29 | Parse LLM Response | code | Validates & merges match scores into jobs, sorts by match % |
+| 30 | LLM Succeeded? | if | Routes: LLM worked → email, LLM failed → end |
+| 31 | Format Email | code | Builds detailed email with summary, matches, gaps per job; also applies `min_match_percent` |
+| 32 | Send Gmail | gmail | Sends detailed results email |
 
 ### Telegram Message Formats
 
