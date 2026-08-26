@@ -12,11 +12,12 @@
 ## Step 1: Start n8n
 
 ```bash
-mkdir -p ~/n8n-job-search
-cd ~/n8n-job-search
-# Copy docker-compose.yml here
-docker compose up -d
+git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
+cd YOUR_REPO
+docker compose up -d --build
 ```
+
+This builds the repo's own `Dockerfile` (pinned to `n8nio/n8n:1.123.25`) and auto-imports all 3 workflow JSONs on first start — you'll see them already in the Workflows list once n8n is up. **Auto-import only handles the workflow definitions.** Credentials (Google Sheets, Telegram, Gmail) still need one-time interactive setup in the n8n UI (Steps 3 and 5 below) — OAuth consent can't be scripted.
 
 Open: **http://localhost:5678**  
 First time: Create an owner account (email + password). Local only.
@@ -57,23 +58,34 @@ Paste the data from [`examples/google-sheet/resume_template.csv`](../examples/go
 ## Step 3: Configure Credentials in n8n
 
 ### Google Sheets OAuth2
-1. Settings → Credentials → Add Credential
-2. Search "Google Sheets" → select OAuth2
-3. Click "Sign in with Google" → authorize
-4. Save
+
+Self-hosted n8n (local or cloud) doesn't ship with a pre-registered Google OAuth client the way n8n Cloud does — you register your own, once, in Google Cloud Console. **This is identical whether n8n is running locally or on the GCP VM from Part 2 — the only difference between the two is the redirect URI value in step 3.** The Google Cloud project you create here is unrelated to (and doesn't require) any VM — it's pure OAuth/API registration, separate from wherever n8n happens to be hosted.
+
+1. In n8n: **Settings → Credentials → Add Credential** → search **Google Sheets OAuth2**. Leave this tab open — it shows an **OAuth Redirect URL** you'll need in step 3 (for local: `http://localhost:5678/rest/oauth2-credential/callback`; for the GCP VM from Part 2: `https://<VM_IP>.nip.io/rest/oauth2-credential/callback` — always copy the exact value n8n shows you rather than typing it from memory).
+2. In [Google Cloud Console](https://console.cloud.google.com), create or pick any project (free, no billing/VM required):
+   - **APIs & Services → Library** → search "Google Sheets API" → **Enable**
+   - Also search "Google Drive API" → **Enable** — n8n's Sheets node uses this to list/browse your spreadsheets in its picker UI, even though actual reads/writes go through the Sheets API. Skipping this causes a 403 ("Drive API not enabled") the first time you open a node like Read Config.
+   - **APIs & Services → OAuth consent screen** → User type **External** → fill in an app name/support email → **Save**. It'll be in "Testing" mode — add your own Google account under **Test users** so you can actually sign in (unverified apps otherwise reject everyone).
+3. **APIs & Services → Credentials → Create Credentials → OAuth Client ID** → type **Web application** → under **Authorized redirect URIs**, paste the exact URL n8n showed you in step 1.
+4. Google shows a dialog with your **Client ID** and **Client Secret**, plus a **Download JSON** button — click it and save the file somewhere safe (a password manager, not this repo). You'll need these values again if you ever recreate this credential in n8n (new instance, lost data, etc.), and the Client Secret isn't shown in full again from the Console afterward. Copy the Client ID and Client Secret back into the n8n credential form from step 1.
+5. Click **Sign in with Google**. You'll hit Google's "unverified app" warning (expected — same mechanism as the `bootstrap.gs` Apps Script consent earlier, just for an OAuth Client instead of a script): **Advanced → Go to [your app name] (unsafe) → Allow**.
+6. **Save** in n8n.
 
 ### Telegram Bot
 1. Settings → Credentials → Add Credential  
 2. Search "Telegram"
-3. Paste your Bot Token (get it from @BotFather on Telegram)
+3. Paste your Bot Token (get it from @BotFather on Telegram — message it `/newbot` to create one, or `/mybots` → your bot → API Token to retrieve an existing one)
 4. Save
+
+**Also get your chat ID** (separate from the bot token — this is *where* the bot sends messages, set via the `TELEGRAM_CHAT_ID` env var, not stored as a credential): message **@userinfobot** on Telegram and it replies with your numeric user ID. Then **open a chat with your own bot and send it any message** (e.g. `/start`) — Telegram bots can't message a user who hasn't initiated contact first, so skipping this causes a "chat not found" error later even with a correct token and chat ID.
 
 ---
 
-## Step 4: Import Workflow
+## Step 4: Confirm the Workflow Is Present
 
-1. Workflows → Import from file
-2. Select `n8n_job_search_v1.json`
+The Docker image auto-imports all 3 workflow JSONs on first start (see Step 1) — open **Workflows** in the n8n UI and confirm `LinkedIn Job Search V1` is listed. Nothing to import manually.
+
+If you're running n8n a different way (not via this repo's `docker-compose.yml`/`Dockerfile`), import it yourself: Workflows → Import from file → select `n8n_job_search_v1.json`.
 
 ---
 
@@ -81,10 +93,14 @@ Paste the data from [`examples/google-sheet/resume_template.csv`](../examples/go
 
 Each node with ⚠️ needs credentials linked:
 
-**Google Sheets credential** → Read Config, Read Results, Append to Results, Read Unnotified, Update Notified Status  
-**Telegram credential** → Send Telegram
+**Google Sheets credential** → Read Config, Read Results, Append to Results, Read Unnotified, Update Notified Status, Read Resume, Read Settings  
+**Telegram credential** → Send Telegram, Send No Results Telegram, Telegram Trigger (leave this one — it's disabled by default; see the Telegram Trigger note earlier in this doc for when to enable it on cloud)
 
 Double-click node → select credential from dropdown → close.
+
+**This alone isn't enough to make the Google Sheets nodes work.** Attaching a credential only tells the node *how* to authenticate — it doesn't tell it *which* spreadsheet to use. Every Google Sheets node above still points at the placeholder `YOUR_GOOGLE_SHEET_DOCUMENT_ID` from the committed workflow JSON, not your actual Sheet. You must repoint each one individually:
+
+For **each** of the 7 nodes listed above: double-click it → the **Document** field → click the dropdown/**From list** → select your actual Google Sheet (now that a credential is attached, it can browse your Drive) → the field switches from the placeholder to your real spreadsheet → close the node. There's no bulk/one-shot way to do this — n8n stores the document reference per-node, so all 7 need it individually.
 
 ---
 
@@ -95,12 +111,26 @@ Double-click node → select credential from dropdown → close.
 
 ---
 
+## Before you run it: what are you actually about to test?
+
+A first run with no changes applies these defaults — worth knowing up front so the results (or lack of them) make sense:
+
+| Filter | Default | Where it's set |
+|--------|---------|-----------------|
+| Time window | Last 24 hours | Built into `Build Search URLs`' code (`staticDataForTime.customTimeWindow \|\| 86400`); Manual Trigger doesn't override this |
+| Location | Bengaluru, Karnataka (India, broad) | Settings tab (`location_f_pp`/`location_geo_id`/`location_city_names`) if set, else `.env` — blank in both means these Bengaluru defaults apply |
+| Max experience required | 4 years | Settings tab (`max_experience_years`) if set, else `.env` — blank in both means this default applies |
+| Match % shown in Telegram | All shown (no minimum) | Settings tab (`min_match_percent`) — see "Customizing Location, Experience & Role Filters" below |
+| Companies searched | Every row in the Config tab with `Active=TRUE` | Config tab — see "Add/Remove Companies" below |
+
+Because the window is only 24 hours, a first test run can easily come back with **zero results** simply because none of your configured companies happened to post a matching Bengaluru role in the last day — that's expected behavior, not a broken setup. Widen the window temporarily (next step) if you want to confirm the pipeline works end-to-end rather than waiting for real-time luck.
+
 ## Step 7: First Test Run
 
 1. Click "Test workflow" (top right)
 2. Watch nodes light up green
-3. **For first test:** Edit "Build Search URLs" → change `TIME_WINDOW_SECONDS = 2592000` (30 days) to get results
-4. Change back to `43200` after testing
+3. **To guarantee some results while testing** (rather than waiting on the last 24h): open `Build Search URLs`, find `const TIME_WINDOW_SECONDS = staticDataForTime.customTimeWindow || 86400;`, temporarily change the `86400` to something larger like `2592000` (30 days)
+4. Change it back to `86400` afterward — leaving it widened would apply to real scheduled/manual runs too, not just your test
 
 ---
 
@@ -112,15 +142,16 @@ Toggle "Active" switch → ON. Runs at 7 AM & 7 PM IST automatically.
 
 ## Instant/Ad-hoc Run
 
-**Quick run:** Click "Test workflow" in editor (uses current TIME_WINDOW).
+**Quick run:** Click "Test workflow" in editor (uses the 24h default described above).
 
-**Custom time window:** Edit "Build Search URLs" → change TIME_WINDOW_SECONDS:
+**Custom time window:** Same `Build Search URLs` edit as Step 7 — swap the `86400` fallback for:
 - 7200 = 2 hours
 - 14400 = 4 hours  
 - 28800 = 8 hours
-- 43200 = 12 hours (default)
+- 43200 = 12 hours
+- 86400 = 24 hours (default)
 
-Run, then change back.
+Run, then change back to `86400`.
 
 ---
 
@@ -143,30 +174,56 @@ Open Google Sheet → Config tab:
 
 ## Customizing Location, Experience & Role Filters
 
-These are controlled by environment variables (with sensible defaults baked in, so none are required):
+**Two ways to set location/experience/match-threshold, in priority order:**
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `TELEGRAM_CHAT_ID` | *(none — required)* | Chat ID the bot sends notifications to |
-| `GEMINI_API_KEY` | *(none — required for LLM matching)* | Gemini Flash API key for resume matching |
-| `LOCATION_GEO_ID` | `102713980` (India) | LinkedIn `geoId` — broad country/region scope |
-| `LOCATION_F_PP` | `105214831` (Bengaluru) | LinkedIn `f_PP` place ID(s) — comma-separated for multi-city |
-| `LOCATION_CITY_NAMES` | `bengaluru,bangalore,karnataka` | Substrings checked against each job's parsed location; keep in sync with `LOCATION_F_PP` |
-| `MAX_EXPERIENCE_YEARS` | `4` | Skip roles requiring more than this many years |
-| `VM_IP` | — | Set by `deploy/setup.sh`; used for the `nip.io` HTTPS domain |
-| `N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD` | — | Protects the n8n web UI on cloud deployments |
-| `MCP_WEBHOOK_URL` | *(none — required for the MCP server)* | Base URL the `parse-linkedin-job` MCP tool calls |
+1. **Settings tab in your Google Sheet** (`location_geo_id`, `location_f_pp`, `location_city_names`, `max_experience_years`, `min_experience_years`, `min_match_percent`) — created by `bootstrap.gs`, pre-filled with the same defaults as below. Edit anytime in your browser; the workflow reads it fresh on every run, **no container restart needed**. Leave a value blank to fall back to its env var. **Row 1 must be the literal headers `Key` and `Value`** if you create this tab by hand instead of via `bootstrap.gs` — see `TROUBLESHOOTING.md` if values don't seem to be taking effect.
+2. **Environment variables** (below) — the fallback when the matching Settings row is blank or the tab doesn't exist. Requires a container recreate (`docker compose up -d`, not just `restart`) to take effect.
 
-Set these in `deploy/.env` (copy from `deploy/.env.example`) for cloud deployments, or pass them as `environment:` values in `docker-compose.yml` for local dev.
+Settings tab wins when both are set. Most users should just use the Settings tab day-to-day — env vars exist mainly for cloud deployments where you want values baked into the container config, or as the fallback if you're not using `bootstrap.gs`.
 
-### Multi-city example
+| Variable | Settings tab key | Default | Purpose |
+|----------|-------------------|---------|---------|
+| `TELEGRAM_CHAT_ID` | — (not settable via Sheet) | *(none — required)* | Chat ID the bot sends notifications to — message @userinfobot on Telegram to get your numeric ID, see Step 3 |
+| `GEMINI_API_KEY` | — (not settable via Sheet) | *(none — required for LLM matching)* | Gemini Flash API key for resume matching — free key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey), no billing account required for the free tier (works even with an expired GCP trial — project creation and this API's free tier are unrelated to trial/billing status) |
+| `LOCATION_GEO_ID` | `location_geo_id` | `102713980` (India) | LinkedIn `geoId` — broad country/region scope |
+| `LOCATION_F_PP` | `location_f_pp` | `105214831` (Bengaluru) | LinkedIn `f_PP` place ID(s) — comma-separated for multi-city |
+| `LOCATION_CITY_NAMES` | `location_city_names` | `bengaluru,bangalore,karnataka` | Substrings checked against each job's parsed location; keep in sync with `LOCATION_F_PP` |
+| `MAX_EXPERIENCE_YEARS` | `max_experience_years` | `4` | Upper bound of the experience bracket you're targeting |
+| `MIN_EXPERIENCE_YEARS` | `min_experience_years` | `0` (no floor) | Lower bound of the experience bracket you're targeting. Together with `MAX_EXPERIENCE_YEARS`: a role matches if its own stated range overlaps `[MIN, MAX]` at all — touching boundaries count as a match, and open-ended postings ("5+ years") always satisfy the upper-bound side since they have no ceiling to compare. Deliberately permissive: e.g. targeting `3-5`, a "2-4 years" posting matches, and so does "5+ years", but "8+ years" doesn't. Defaults reproduce the original single-ceiling behavior exactly. |
+| `MIN_MATCH_PERCENT` | `min_match_percent` | `0` (no suppression) | Hide jobs scoring below this % from the Telegram message (still logged to the Results sheet and marked notified — see `CLAUDE.md`'s Settings tab section) |
+| `VM_IP` | — | — | Set by `deploy/setup.sh`; used for the `nip.io` HTTPS domain |
+| `DOCKER_IMAGE` | — | `ghcr.io/jatin17solanki/linkedin-automation-n8n:latest` | Pre-built image to pull for production; override if you've forked the repo and publish your own |
+| `N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD` | — | — | Protects the n8n web UI on cloud deployments |
+| `MCP_WEBHOOK_URL` | — | *(none — required for the MCP server)* | Base URL the `parse-linkedin-job` MCP tool calls |
 
-LinkedIn's `f_PP` parameter accepts a comma-separated list of place IDs, OR-matched. To search Bengaluru **and** Mumbai:
+Set env vars in `deploy/.env` (copy from `deploy/.env.example`) for cloud deployments, or pass them as `environment:` values in `docker-compose.yml` for local dev. **Not yet implemented in `n8n_company_search_v1.json`** — the `/search` workflow still uses env vars only for location/experience, no Settings-tab override there yet.
+
+### Adding multiple cities
+
+Two fields change, both comma-separated lists — `location_geo_id` (Settings tab) / `LOCATION_GEO_ID` (env var) does **not** need to change for multi-city within the same country; it stays at the broad India-level default.
+
+1. **`location_f_pp` / `LOCATION_F_PP`** — LinkedIn's actual search filter. Accepts a comma-separated list of place IDs, OR-matched (LinkedIn returns results matching *any* listed city).
+2. **`location_city_names` / `LOCATION_CITY_NAMES`** — this project's own post-fetch safety check (see `CLAUDE.md`'s Filters section: "LinkedIn's `f_PP` URL param alone is unreliable — non-target-city roles leak through"). Add every city (and its state, as a fallback — see below) you added to `location_f_pp`, or jobs from that city will pass LinkedIn's filter but then get silently rejected by this project's own location check.
+
+**Getting a city's place ID:** go to `linkedin.com/jobs/search`, use the **Location** filter box, and pick the city from LinkedIn's own autocomplete dropdown (free-typed text won't generate a real place ID). Copy the `f_PP=<number>` value from the resulting URL.
+
+**Known place IDs** (found this way during this project's own testing — reuse these instead of re-deriving them):
+
+| City | `f_PP` value |
+|------|--------------|
+| Bengaluru | `105214831` |
+| Mumbai | `90009551` |
+| Hyderabad | `105556991` |
+| Gurugram | `106442238` |
+
+**Worked example** — Bengaluru + Hyderabad + Gurugram:
 
 ```
-LOCATION_F_PP=105214831,90009551
-LOCATION_CITY_NAMES=bengaluru,bangalore,karnataka,mumbai
+LOCATION_F_PP=105214831,105556991,106442238
+LOCATION_CITY_NAMES=bengaluru,bangalore,karnataka,hyderabad,telangana,gurugram,gurgaon,haryana
 ```
+
+Two things about the city-names list above worth noting as a pattern for any city you add: include the **state name** alongside the city (LinkedIn's parsed location text sometimes only surfaces the state), and include **known alternate spellings** (Gurugram was officially renamed from Gurgaon, and job postings inconsistently use either — matching only one would silently drop real matches under the other spelling).
 
 Find a city's `f_PP` value by searching LinkedIn Jobs with that location filter applied and reading the `f_PP` param out of the resulting URL. `LOCATION_GEO_ID` stays a single broad value (e.g. `102713980` for all of India) — it isn't per-city.
 
@@ -272,8 +329,10 @@ sudo bash deploy/setup.sh
 The script will:
 1. Install Docker and Docker Compose
 2. Ask for n8n username and password (protects the web UI)
-3. Start n8n + Caddy containers
+3. Pull the pre-built image from GitHub Container Registry (`ghcr.io/jatin17solanki/linkedin-automation-n8n:latest` by default — override via `DOCKER_IMAGE` in `deploy/.env` if you've forked the repo and publish your own) and start n8n + Caddy containers
 4. Print your n8n URL
+
+All 3 workflow JSONs are already imported into the image (see Part 1, Step 1) — no manual import needed once the container is up.
 
 ### 2.3 — Verify
 
@@ -291,14 +350,7 @@ Open `https://<YOUR_VM_IP>.nip.io` in your browser. You should see the n8n login
 
 ### 3.1 — Set up Google Sheets credential
 
-1. In n8n: **Credentials** → **Add Credential** → search **Google Sheets OAuth2**
-2. You'll see a **OAuth Redirect URL** — copy it
-3. In [Google Cloud Console](https://console.cloud.google.com):
-   - **APIs & Services** → **Credentials** → **Create Credentials** → **OAuth Client ID**
-   - Type: **Web application**
-   - Authorized redirect URIs: paste the URI from n8n
-4. Copy **Client ID** and **Client Secret** back into n8n
-5. Click **Sign in with Google** → authorize → **Save**
+Same steps as Part 1's **Google Sheets OAuth2** section — the OAuth Client ID setup in Google Cloud Console is identical regardless of where n8n runs. The only difference: the redirect URI n8n shows you here will be `https://<VM_IP>.nip.io/rest/oauth2-credential/callback` instead of the `localhost` one. Use that value in place of the local one; everything else (enabling the Sheets API, OAuth consent screen, Client ID creation, unverified-app warning) is the same.
 
 ### 3.2 — Set up Telegram credential
 
@@ -306,9 +358,9 @@ Open `https://<YOUR_VM_IP>.nip.io` in your browser. You should see the n8n login
 2. Paste your bot token (from @BotFather)
 3. Save
 
-### 3.3 — Import workflow + connect credentials
+### 3.3 — Connect credentials
 
-1. **Workflows** → import `n8n_job_search_v1.json`
+1. **Workflows** → open `LinkedIn Job Search V1` (already imported — see Step 2.2)
 2. Open each node with a ⚠️ warning → select the correct credential from the dropdown
 3. **Enable** the Telegram Trigger node (right-click → Enable)
 4. **Disable** the Webhook Trigger node (not needed on cloud)
@@ -407,6 +459,6 @@ sudo docker compose logs -f --tail=50
 # Restart everything
 sudo docker compose restart
 
-# Update n8n to latest
+# Pull the latest published image and recreate the container
 sudo docker compose pull n8n && sudo docker compose up -d
 ```

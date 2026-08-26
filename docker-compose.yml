@@ -1,10 +1,21 @@
 # Local development only. For production deployment, see deploy/docker-compose.prod.yml
-version: '3.8'
-
+# Builds the repo's own Dockerfile, which auto-imports the 3 workflow JSONs on
+# first start (see Dockerfile / docker/import-entrypoint.sh). Run with:
+#   docker compose up --build
+#
+# Deliberately no `container_name` here: Docker container names are global on
+# the host regardless of Compose project, so a fixed name here would collide
+# with any other instance of this stack you're running (e.g. a second
+# isolated test under `-p <other-name>`). Without it, Compose derives a
+# project-scoped name automatically (`<project>-n8n-1`) — use
+# `docker compose ps` / `docker compose logs n8n` instead of a hardcoded
+# container name.
 services:
   n8n:
-    image: n8nio/n8n:latest
-    container_name: n8n-job-search
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: linkedin-automation-n8n:local
     restart: unless-stopped
     ports:
       - "5678:5678"
@@ -19,7 +30,11 @@ services:
       - LOCATION_F_PP=${LOCATION_F_PP:-}
       - LOCATION_CITY_NAMES=${LOCATION_CITY_NAMES:-}
       - MAX_EXPERIENCE_YEARS=${MAX_EXPERIENCE_YEARS:-}
-      - N8N_EXTERNAL_ALLOWED_ENVIRONMENT_VARIABLES=GEMINI_API_KEY,TELEGRAM_CHAT_ID,LOCATION_GEO_ID,LOCATION_F_PP,LOCATION_CITY_NAMES,MAX_EXPERIENCE_YEARS
+      - MIN_EXPERIENCE_YEARS=${MIN_EXPERIENCE_YEARS:-}
+      - MIN_MATCH_PERCENT=${MIN_MATCH_PERCENT:-}
+      - N8N_EXTERNAL_ALLOWED_ENVIRONMENT_VARIABLES=GEMINI_API_KEY,TELEGRAM_CHAT_ID,LOCATION_GEO_ID,LOCATION_F_PP,LOCATION_CITY_NAMES,MAX_EXPERIENCE_YEARS,MIN_EXPERIENCE_YEARS,MIN_MATCH_PERCENT
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - N8N_RUNNERS_ENABLED=false
     volumes:
       - n8n_data:/home/node/.n8n
     healthcheck:

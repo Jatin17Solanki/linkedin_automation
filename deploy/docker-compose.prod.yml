@@ -1,6 +1,9 @@
 services:
   n8n:
-    image: n8nio/n8n:1.123.25
+    # Pre-built image published by CI (see .github/workflows/deploy.yml), auto-imports
+    # the 3 workflow JSONs on first start. Override DOCKER_IMAGE in deploy/.env if you've
+    # forked this repo and publish under your own GHCR namespace.
+    image: ${DOCKER_IMAGE:-ghcr.io/jatin17solanki/linkedin-automation-n8n:latest}
     container_name: n8n-job-search
     restart: unless-stopped
     ports:
@@ -22,7 +25,10 @@ services:
       - LOCATION_F_PP=${LOCATION_F_PP:-105214831}
       - LOCATION_CITY_NAMES=${LOCATION_CITY_NAMES:-bengaluru,bangalore,karnataka}
       - MAX_EXPERIENCE_YEARS=${MAX_EXPERIENCE_YEARS:-4}
-      - N8N_EXTERNAL_ALLOWED_ENVIRONMENT_VARIABLES=GEMINI_API_KEY,TELEGRAM_CHAT_ID,LOCATION_GEO_ID,LOCATION_F_PP,LOCATION_CITY_NAMES,MAX_EXPERIENCE_YEARS
+      - MIN_EXPERIENCE_YEARS=${MIN_EXPERIENCE_YEARS:-0}
+      - MIN_MATCH_PERCENT=${MIN_MATCH_PERCENT:-0}
+      - N8N_EXTERNAL_ALLOWED_ENVIRONMENT_VARIABLES=GEMINI_API_KEY,TELEGRAM_CHAT_ID,LOCATION_GEO_ID,LOCATION_F_PP,LOCATION_CITY_NAMES,MAX_EXPERIENCE_YEARS,MIN_EXPERIENCE_YEARS,MIN_MATCH_PERCENT
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
       - N8N_RUNNERS_ENABLED=false
       - NODE_OPTIONS=--max-old-space-size=512
       - EXECUTIONS_DATA_PRUNE=true
