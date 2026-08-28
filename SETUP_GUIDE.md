@@ -191,10 +191,11 @@ Settings tab wins when both are set. Most users should just use the Settings tab
 | `MAX_EXPERIENCE_YEARS` | `max_experience_years` | `4` | Upper bound of the experience bracket you're targeting |
 | `MIN_EXPERIENCE_YEARS` | `min_experience_years` | `0` (no floor) | Lower bound of the experience bracket you're targeting. Together with `MAX_EXPERIENCE_YEARS`: a role matches if its own stated range overlaps `[MIN, MAX]` at all — touching boundaries count as a match, and open-ended postings ("5+ years") always satisfy the upper-bound side since they have no ceiling to compare. Deliberately permissive: e.g. targeting `3-5`, a "2-4 years" posting matches, and so does "5+ years", but "8+ years" doesn't. Defaults reproduce the original single-ceiling behavior exactly. |
 | `MIN_MATCH_PERCENT` | `min_match_percent` | `0` (no suppression) | Hide jobs scoring below this % from the Telegram message (still logged to the Results sheet and marked notified — see `CLAUDE.md`'s Settings tab section) |
-| `VM_IP` | — | — | Set by `deploy/setup.sh`; used for the `nip.io` HTTPS domain |
+| `VM_IP` | — | — | Set by `deploy/setup-gcp.sh` (or `setup-aws.sh`); used for the `nip.io` HTTPS domain |
 | `DOCKER_IMAGE` | — | `ghcr.io/jatin17solanki/linkedin-automation-n8n:latest` | Pre-built image to pull for production; override if you've forked the repo and publish your own |
 | `N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD` | — | — | Protects the n8n web UI on cloud deployments |
 | `MCP_WEBHOOK_URL` | — | *(none — required for the MCP server)* | Base URL the `parse-linkedin-job` MCP tool calls |
+| `N8N_MEM_LIMIT` / `N8N_MEMSWAP_LIMIT` / `NODE_MAX_OLD_SPACE` | — | `600m` / `800m` / `512` | Memory tuning, sized for a 1GB-RAM free-tier VM — only raise these on a larger instance. See `TROUBLESHOOTING.md`'s "VM freezes completely" entry |
 
 Set env vars in `deploy/.env` (copy from `deploy/.env.example`) for cloud deployments, or pass them as `environment:` values in `docker-compose.yml` for local dev. `n8n_company_search_v1.json` (the on-demand `/search` workflow) uses the same Settings tab and precedence — both workflows stay in sync.
 
@@ -323,16 +324,21 @@ gcloud compute ssh n8n-server --zone=us-central1-a
 ```bash
 git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
 cd YOUR_REPO
-sudo bash deploy/setup.sh
+sudo bash deploy/setup-gcp.sh
 ```
 
 The script will:
 1. Install Docker and Docker Compose
-2. Ask for n8n username and password (protects the web UI)
-3. Pull the pre-built image from GitHub Container Registry (`ghcr.io/jatin17solanki/linkedin-automation-n8n:latest` by default — override via `DOCKER_IMAGE` in `deploy/.env` if you've forked the repo and publish your own) and start n8n + Caddy containers
-4. Print your n8n URL
+2. Set up a 2GB swapfile if none is active yet (required on the 1GB-RAM e2-micro — see `TROUBLESHOOTING.md`; set `LOW_MEMORY=false` before the command above to skip this on a larger VM)
+3. Create the Docker volumes n8n/Caddy data lives in
+4. Ask for n8n username and password (protects the web UI)
+5. Open ports 80/443 via iptables
+6. Pull the pre-built image from GitHub Container Registry (`ghcr.io/jatin17solanki/linkedin-automation-n8n:latest` by default — override via `DOCKER_IMAGE` in `deploy/.env` if you've forked the repo and publish your own) and start n8n + Caddy containers
+7. Print your n8n URL
 
 All 3 workflow JSONs are already imported into the image (see Part 1, Step 1) — no manual import needed once the container is up.
+
+Shared logic between this and the AWS EC2 script lives in `deploy/setup-common.sh` — only IP autodetection and the walkthrough text are GCP-specific.
 
 ### 2.3 — Verify
 

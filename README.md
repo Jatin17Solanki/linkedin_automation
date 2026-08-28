@@ -138,7 +138,7 @@ Internet --> Caddy (:443, nip.io) --> n8n (:5678) --> SQLite
 ```bash
 # On a fresh Ubuntu 22.04 VM:
 git clone <repo> && cd linkedin_automation
-sudo bash deploy/setup.sh
+sudo bash deploy/setup-gcp.sh
 # Then: open https://<VM_IP>.nip.io, connect credentials (workflows are pre-imported)
 ```
 
