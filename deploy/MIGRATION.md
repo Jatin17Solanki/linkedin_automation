@@ -117,15 +117,24 @@ terminal. You'll use this for all VM commands in the steps below.
 
 Run all commands in this phase on the **new VM**.
 
-**Step 3.1 — Configure swap (required — e2-micro only has 1GB RAM)**
+**Step 3.1 — Clone the repo and run setup**
 ```bash
-sudo fallocate -l 2G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
+git clone https://github.com/Jatin17Solanki/linkedin_automation.git
+cd linkedin_automation
+sudo bash deploy/setup-gcp.sh
+```
+
+`setup-gcp.sh` installs Docker and Docker Compose, sets up the 2GB swapfile
+(required — e2-micro only has 1GB RAM) if none is active yet, and creates the
+Docker volumes below automatically — none of that needs to be done by hand
+anymore. It also prompts you for n8n basic auth username/password and starts
+the stack immediately at the end, which matters for Step 4 below.
+
+When it finishes, log out and back in so your user is added to the `docker` group:
+```bash
+exit
+# reconnect via SSH or browser terminal, then:
+docker ps   # should show n8n-job-search and caddy-proxy running
 ```
 
 Verify swap is active:
@@ -133,46 +142,37 @@ Verify swap is active:
 free -h   # should show ~2G under "Swap"
 ```
 
-**Step 3.2 — Clone the repo and run setup**
-```bash
-git clone https://github.com/Jatin17Solanki/linkedin_automation.git
-cd linkedin_automation
-sudo bash deploy/setup.sh
-```
+**Step 3.2 — Update the `.env` file**
 
-`setup.sh` installs Docker and Docker Compose. When it finishes, log out and back in
-so your user is added to the `docker` group:
+`setup-gcp.sh` already created `~/linkedin_automation/deploy/.env` with `VM_IP`
+and the basic auth credentials you entered interactively. Add the rest of the
+values you noted in Phase 1:
 ```bash
-exit
-# reconnect via SSH or browser terminal, then:
-docker ps   # should return empty list with no permission error
-```
-
-**Step 3.3 — Create the `.env` file**
-```bash
-cat > ~/linkedin_automation/deploy/.env << 'EOF'
-VM_IP=<YOUR_NEW_VM_IP>
-N8N_BASIC_AUTH_USER=<from old .env>
-N8N_BASIC_AUTH_PASSWORD=<from old .env>
+cat >> ~/linkedin_automation/deploy/.env << 'EOF'
 GEMINI_API_KEY=<from old .env>
 EOF
 ```
 
-Replace the placeholders with the values you noted in Phase 1.
-
-**Step 3.4 — Create Docker volumes**
-
-These must be created manually before `docker compose up` because they are declared
-as `external` in the compose file:
+Then apply it:
 ```bash
-docker volume create n8n_n8n_data
-docker volume create n8n_caddy_data
-docker volume create n8n_caddy_config
+cd ~/linkedin_automation/deploy && docker compose -f docker-compose.prod.yml up -d
 ```
 
 ---
 
 ## Phase 4 — Restore n8n Data (New VM)
+
+**Step 4.0 — Stop n8n before restoring**
+
+`setup-gcp.sh` already started a fresh, empty n8n instance in Step 3.1 (its
+Docker volumes now exist, so unlike before this automation, `docker compose up`
+actually succeeds instead of failing on missing volumes). Untarring the backup
+into a volume while n8n has it open risks a corrupt SQLite database, so stop
+it first:
+```bash
+cd ~/linkedin_automation/deploy
+docker compose -f docker-compose.prod.yml stop n8n
+```
 
 **Step 4.1 — Upload backup to new VM**
 
@@ -299,7 +299,7 @@ If still no response, open the workflow → Telegram Trigger node → check the 
 URL shown matches `https://<NEW_IP>.nip.io/...`.
 
 **`docker ps` shows permission denied**
-You haven't logged out and back in after `setup.sh`. Run `exit`, reconnect, try again.
+You haven't logged out and back in after `setup-gcp.sh`. Run `exit`, reconnect, try again.
 
 **`docker volume create` says volume already exists**
 That's fine — it was created by a previous attempt. Continue.

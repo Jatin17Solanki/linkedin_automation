@@ -279,20 +279,21 @@ Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Doc
 | `docker/import-entrypoint.sh` | Runs `n8n import:workflow` for each bundled JSON (marker-gated, first start only), then hands off to the base image's entrypoint |
 | `deploy/docker-compose.prod.yml` | Production compose with n8n (pulls the published GHCR image by default) + Caddy |
 | `deploy/Caddyfile` | Caddy reverse proxy config |
-| `deploy/setup.sh` | One-time VM setup (Docker, dirs, services) |
+| `deploy/setup-common.sh` | Shared provider-agnostic setup logic (Docker install, volumes, swapfile, `.env`, firewall, compose up) sourced by `setup-gcp.sh`/`setup-aws.sh` |
+| `deploy/setup-gcp.sh` | One-time GCP VM setup — GCP IP autodetection + the shared logic above |
 | `deploy/import-workflow.sh` | Import/update workflow via n8n REST API |
 | `.github/workflows/deploy.yml` | CI/CD — auto-deploy workflow JSON changes on push to main |
 | `.github/workflows/docker-publish.yml` | CI/CD — builds and publishes the Docker image to GHCR on push to main / version tags |
 
 ### GCP VM Setup
 1. Create e2-micro VM (Ubuntu 22.04, us-central1-a) with HTTP/HTTPS firewall enabled
-2. SSH in, clone the repo, run `sudo bash deploy/setup.sh`
+2. SSH in, clone the repo, run `sudo bash deploy/setup-gcp.sh`
 3. Open `https://<VM_IP>.nip.io`, set up Google Sheets + Telegram credentials
 4. Import workflow, enable Telegram Trigger node, activate workflow
 5. Generate n8n API key (Settings > API) for CI/CD
 
-### VM Swap Configuration (one-time, required)
-The e2-micro has only 1GB RAM. Without swap, the VM freezes completely when n8n's workflow run exhausts memory. Run these once after VM creation:
+### VM Swap Configuration
+The e2-micro has only 1GB RAM. Without swap, the VM freezes completely when n8n's workflow run exhausts memory. `deploy/setup-gcp.sh` (via `setup-common.sh`'s `setup_swapfile`) does this automatically — creates a 2GB swapfile and sets `vm.swappiness=10`, skipped if swap is already active, or if invoked with `LOW_MEMORY=false` on a VM with more RAM. Manual steps below are only needed on a VM whose setup script predates this automation:
 
 ```bash
 sudo fallocate -l 2G /swapfile
@@ -304,7 +305,7 @@ echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 ```
 
-This adds a 2GB swapfile on the persistent disk (free tier) and sets swappiness=10 so the kernel only swaps under real memory pressure. Combined with the `mem_limit: 600m` on the n8n container in `docker-compose.prod.yml`, this ensures a bad workflow run degrades gracefully (container OOM-kills and restarts) rather than freezing the whole VM.
+This adds a 2GB swapfile on the persistent disk (free tier) and sets swappiness=10 so the kernel only swaps under real memory pressure. Combined with the `mem_limit`/`memswap_limit` (defaults `600m`/`800m`, overridable via `N8N_MEM_LIMIT`/`N8N_MEMSWAP_LIMIT` in `deploy/.env`) on the n8n container in `docker-compose.prod.yml`, this ensures a bad workflow run degrades gracefully (container OOM-kills and restarts) rather than freezing the whole VM.
 
 ### GitHub Actions CI/CD
 Auto-deploys workflow changes when `n8n_job_search_v1.json` is pushed to `main`.
