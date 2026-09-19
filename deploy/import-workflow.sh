@@ -15,16 +15,26 @@ fi
 
 API_URL="${N8N_URL}/api/v1"
 
-echo "Checking for existing workflows..."
+# Match against the workflow's own "name" field from the JSON file, not a
+# hardcoded substring -- this lets the same script import any of the 3
+# workflow JSONs (LinkedIn Job Search V1 / Company Search V1 / Job Parser)
+# without per-workflow special-casing. Passed via env var (not interpolated
+# into the python source) to avoid any quoting issues.
+export WORKFLOW_FILE
+WORKFLOW_NAME=$(python3 -c "import json, os; print(json.load(open(os.environ['WORKFLOW_FILE']))['name'])")
 
-# List workflows and find ours by name
+echo "Checking for existing workflow named '$WORKFLOW_NAME'..."
+
+# List workflows and find ours by exact name match
+export WORKFLOW_NAME
 EXISTING=$(curl -s -H "X-N8N-API-KEY: $API_KEY" "$API_URL/workflows" | \
     python3 -c "
-import sys, json
+import sys, json, os
 data = json.load(sys.stdin)
 workflows = data.get('data', [])
+target = os.environ['WORKFLOW_NAME']
 for w in workflows:
-    if 'job' in w.get('name', '').lower() and 'search' in w.get('name', '').lower():
+    if w.get('name', '') == target:
         print(w['id'])
         break
 " 2>/dev/null || echo "")

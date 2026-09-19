@@ -129,7 +129,7 @@ To change either: edit the regex/keyword string directly in the Code node, in **
 
 ## Production Deployment
 
-Runs on a GCP e2-micro (always-free tier) with Caddy for auto-HTTPS:
+Runs on a free-tier GCP e2-micro or AWS EC2 t2.micro/t3.micro VM with Caddy for auto-HTTPS:
 
 ```
 Internet --> Caddy (:443, nip.io) --> n8n (:5678) --> SQLite
@@ -138,11 +138,13 @@ Internet --> Caddy (:443, nip.io) --> n8n (:5678) --> SQLite
 ```bash
 # On a fresh Ubuntu 22.04 VM:
 git clone <repo> && cd linkedin_automation
-sudo bash deploy/setup-gcp.sh
+sudo bash deploy/setup-gcp.sh   # or deploy/setup-aws.sh on AWS EC2
 # Then: open https://<VM_IP>.nip.io, connect credentials (workflows are pre-imported)
 ```
 
-GitHub Actions auto-deploys workflow changes on push to main.
+See `SETUP_GUIDE.md` Part 2 (GCP) or Part 3 (AWS) for the full VM provisioning walkthrough — GCP's free tier is indefinite, AWS's is 12 months.
+
+GitHub Actions auto-deploys all 3 workflow JSONs on push to main.
 
 ## MCP Server
 

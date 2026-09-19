@@ -262,13 +262,13 @@ If a user asks you to change what job titles get filtered (e.g. "also exclude 's
 - Message splitting: Telegram messages auto-split at 4096 char limit
 - Honest filtering: Never fabricate matches. If experience can't be parsed, pass through as "Not specified"
 
-## Production Deployment (GCP e2-micro)
+## Production Deployment (GCP e2-micro or AWS EC2)
 
 ### Architecture
 ```
 Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Docker volume)
 ```
-- VM: GCP e2-micro, Ubuntu 22.04, us-central1-a (always-free tier)
+- VM: GCP e2-micro (always-free tier) or AWS EC2 t2.micro/t3.micro (12-month free tier), Ubuntu 22.04
 - Domain: `<VM_IP>.nip.io` (free, no DNS registration)
 - HTTPS: Let's Encrypt via Caddy (automatic)
 
@@ -281,8 +281,9 @@ Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Doc
 | `deploy/Caddyfile` | Caddy reverse proxy config |
 | `deploy/setup-common.sh` | Shared provider-agnostic setup logic (Docker install, volumes, swapfile, `.env`, firewall, compose up) sourced by `setup-gcp.sh`/`setup-aws.sh` |
 | `deploy/setup-gcp.sh` | One-time GCP VM setup — GCP IP autodetection + the shared logic above |
-| `deploy/import-workflow.sh` | Import/update workflow via n8n REST API |
-| `.github/workflows/deploy.yml` | CI/CD — auto-deploy workflow JSON changes on push to main |
+| `deploy/setup-aws.sh` | One-time AWS EC2 VM setup — EC2 IMDSv2 IP autodetection + the shared logic above |
+| `deploy/import-workflow.sh` | Import/update workflow via n8n REST API; matches the target workflow by its `name` field (not a hardcoded substring), so the same script works for all 3 workflow JSONs |
+| `.github/workflows/deploy.yml` | CI/CD — auto-deploy all 3 workflow JSONs on push to main (secrets are still named `GCP_*` for historical reasons, but the target VM can be on either cloud — see SETUP_GUIDE.md's AWS Step 4) |
 | `.github/workflows/docker-publish.yml` | CI/CD — builds and publishes the Docker image to GHCR on push to main / version tags |
 
 ### GCP VM Setup
@@ -292,8 +293,17 @@ Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Doc
 4. Import workflow, enable Telegram Trigger node, activate workflow
 5. Generate n8n API key (Settings > API) for CI/CD
 
+### AWS EC2 VM Setup
+1. Create a `t2.micro`/`t3.micro` VM (Ubuntu 22.04) with a Security Group allowing inbound 22/80/443 — **AWS gates traffic at the Security Group before it ever reaches the VM's own iptables rules**, unlike GCP; both must allow 80/443 or nothing gets through
+2. SSH in as `ubuntu` (not your AWS account name), clone the repo, run `sudo bash deploy/setup-aws.sh`
+3. Open `https://<VM_IP>.nip.io`, set up Google Sheets + Telegram credentials — identical to the GCP flow from here
+4. Import workflow, enable Telegram Trigger node, activate workflow
+5. Generate n8n API key (Settings > API) for CI/CD
+
+Full walkthrough (Security Group config, Elastic IP, free-tier time limits, key-pair setup): `SETUP_GUIDE.md`'s Part 3.
+
 ### VM Swap Configuration
-The e2-micro has only 1GB RAM. Without swap, the VM freezes completely when n8n's workflow run exhausts memory. `deploy/setup-gcp.sh` (via `setup-common.sh`'s `setup_swapfile`) does this automatically — creates a 2GB swapfile and sets `vm.swappiness=10`, skipped if swap is already active, or if invoked with `LOW_MEMORY=false` on a VM with more RAM. Manual steps below are only needed on a VM whose setup script predates this automation:
+The e2-micro/t2.micro/t3.micro class of VM has only 1GB RAM. Without swap, the VM freezes completely when n8n's workflow run exhausts memory. `deploy/setup-gcp.sh`/`deploy/setup-aws.sh` (via `setup-common.sh`'s `setup_swapfile`) does this automatically — creates a 2GB swapfile and sets `vm.swappiness=10`, skipped if swap is already active, or if invoked with `LOW_MEMORY=false` on a VM with more RAM. Manual steps below are only needed on a VM whose setup script predates this automation:
 
 ```bash
 sudo fallocate -l 2G /swapfile
@@ -308,14 +318,14 @@ sudo sysctl -p
 This adds a 2GB swapfile on the persistent disk (free tier) and sets swappiness=10 so the kernel only swaps under real memory pressure. Combined with the `mem_limit`/`memswap_limit` (defaults `600m`/`800m`, overridable via `N8N_MEM_LIMIT`/`N8N_MEMSWAP_LIMIT` in `deploy/.env`) on the n8n container in `docker-compose.prod.yml`, this ensures a bad workflow run degrades gracefully (container OOM-kills and restarts) rather than freezing the whole VM.
 
 ### GitHub Actions CI/CD
-Auto-deploys workflow changes when `n8n_job_search_v1.json` is pushed to `main`.
+Auto-deploys all 3 workflow JSONs when any of them is pushed to `main` (`import-workflow.sh` matches each by its own `name` field, so this is a single loop, not per-file special-casing).
 
-**Required GitHub Secrets:**
+**Required GitHub Secrets** (names are `GCP_*` for historical reasons — set them the same way regardless of which cloud actually hosts the VM, AWS included):
 | Secret | Value |
 |--------|-------|
-| `GCP_VM_IP` | VM external IP address |
+| `GCP_VM_IP` | VM external IP address (GCP or AWS) |
 | `GCP_SSH_PRIVATE_KEY` | SSH private key for the VM |
-| `GCP_SSH_USER` | SSH username (your Gmail username) |
+| `GCP_SSH_USER` | SSH username — your Gmail username on GCP, `ubuntu` on AWS EC2 |
 | `N8N_API_KEY` | n8n API key from Settings > API |
 
 ### Enabling Telegram Trigger on Cloud

@@ -1,6 +1,6 @@
 # LinkedIn Job Search V1 — Setup Guide
 
-> **Local development** setup is below. For **production deployment to GCP**, see [Part 2: Production Deployment](#part-2-production-deployment-gcp-e2-micro) further down.
+> **Local development** setup is below. For **production deployment**, see [Part 2: GCP](#part-2-production-deployment-gcp-e2-micro) or [Part 3: AWS EC2](#part-3-production-deployment-aws-ec2) further down — both use the same Docker Compose + Caddy architecture, so pick whichever cloud you already have an account with.
 
 ## Prerequisites
 - Docker Desktop running
@@ -455,6 +455,189 @@ Go to your repo → **Settings** → **Secrets and variables** → **Actions** �
 ```bash
 # SSH into VM
 gcloud compute ssh n8n-server --zone=us-central1-a
+
+# Check status
+cd /opt/n8n && sudo docker compose ps
+
+# View logs
+sudo docker compose logs -f --tail=50
+
+# Restart everything
+sudo docker compose restart
+
+# Pull the latest published image and recreate the container
+sudo docker compose pull n8n && sudo docker compose up -d
+```
+
+---
+---
+
+# Part 3: Production Deployment (AWS EC2)
+
+Deploy n8n to a free-tier AWS EC2 VM with HTTPS and GitHub Actions CI/CD — the same architecture as Part 2 (GCP), just a different cloud. Pick **one** of Part 2 or Part 3, not both, unless you deliberately want two separate deployments (that needs a second copy of `.github/workflows/deploy.yml` under a different name, since the shipped one only targets one VM at a time — not covered here).
+
+## Architecture
+
+```
+Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Docker volume)
+```
+
+- **VM:** AWS EC2 `t2.micro` or `t3.micro` (1 GB RAM — same class as GCP's e2-micro), Ubuntu 22.04 LTS
+- **Domain:** `<VM_IP>.nip.io` (free wildcard DNS, no registration)
+- **HTTPS:** Let's Encrypt via Caddy (fully automatic)
+
+> **Cost difference from GCP, read before you start:** GCP's e2-micro free tier is **indefinite** (as long as you stay in an eligible region). AWS's free tier for `t2.micro`/`t3.micro` is **750 hours/month for the first 12 months only**, after which normal hourly billing applies (a few dollars/month for this instance class) unless you stop/terminate it. Set a calendar reminder. See **Costs** below for more detail, including a public-IPv4 charge AWS introduced in 2024 that GCP doesn't have an equivalent of.
+
+---
+
+## Step 1: Create the EC2 VM
+
+### 1.1 — Sign in to the AWS Console
+
+Go to [console.aws.amazon.com](https://console.aws.amazon.com) and sign in (or create an account — requires a credit card even for free-tier usage, unlike GCP's trial).
+
+Pick a region in the top-right corner (e.g. `us-east-1`) — note it down, you'll need it for later CLI/SSH commands and to find your instance again.
+
+### 1.2 — Launch the instance
+
+Go to **EC2** → **Instances** → **Launch instances**, and fill in:
+
+| Setting | Value |
+|---------|-------|
+| Name | `n8n-server` |
+| AMI | **Ubuntu Server 22.04 LTS** (search "Ubuntu" in Quick Start — pick the 64-bit x86 free-tier-eligible one) |
+| Instance type | **t2.micro** or **t3.micro** — whichever is marked "Free tier eligible" in your region (usually both) |
+| Key pair | Click **Create new key pair** → name it `n8n-ec2-key` → type **ED25519** → format **.pem** → **Create key pair** (this downloads the private key — save it somewhere durable, e.g. `~/.ssh/n8n-ec2-key.pem`; AWS never shows it again) |
+| Network settings | Click **Edit** — see Step 1.3 below before launching |
+| Storage | 30 GB **gp3** (default is usually 8GB — increase it; still within the free tier's 30GB EBS allowance) |
+
+### 1.3 — Configure the Security Group (this is the AWS-specific step — GCP has no equivalent)
+
+Unlike GCP, where iptables + the "Allow HTTP/HTTPS" checkboxes are enough, **AWS EC2 traffic is gated by a Security Group first** — `setup-aws.sh` opening ports via iptables on the VM itself does nothing if the Security Group blocks the traffic before it even reaches the VM. Under **Network settings** → **Edit**, create a security group with these inbound rules:
+
+| Type | Protocol | Port | Source | Why |
+|------|----------|------|--------|-----|
+| SSH | TCP | 22 | **My IP** (recommended) or `0.0.0.0/0` | So you can SSH in. "My IP" is safer — Anywhere works if your home/office IP changes often |
+| HTTP | TCP | 80 | `0.0.0.0/0` (Anywhere) | Required for Let's Encrypt's HTTP challenge and Caddy's redirect to HTTPS |
+| HTTPS | TCP | 443 | `0.0.0.0/0` (Anywhere) | The actual n8n traffic, once Caddy has HTTPS working |
+
+Click **Launch instance**.
+
+### 1.4 — Allocate an Elastic IP (strongly recommended)
+
+By default, an EC2 instance's public IP **changes every time you stop and start it** (a plain reboot is fine, it's stop/start that changes it). Since this project's HTTPS domain (`<VM_IP>.nip.io`) and Caddy config are tied to that IP, an IP change means redoing setup. Avoid this:
+
+1. **EC2** → **Elastic IPs** → **Allocate Elastic IP address** → **Allocate**
+2. Select the new address → **Actions** → **Associate Elastic IP address** → choose your `n8n-server` instance → **Associate**
+3. This is now your stable `VM_IP` — write it down
+
+> **Cost note:** an Elastic IP is free **only while associated with a running instance**. If you stop the instance but keep the IP allocated, or leave it unassociated, AWS bills it hourly. Release it (**Actions** → **Release Elastic IP address**) if you ever terminate the instance for good.
+
+### 1.5 — Note your public IP
+
+Find it on the **Instances** page (or the Elastic IP you just allocated) — e.g. `54.123.45.67`.
+
+---
+
+## Step 2: Set Up the VM
+
+### 2.1 — SSH into the VM
+
+```bash
+chmod 600 ~/.ssh/n8n-ec2-key.pem   # required, AWS/SSH rejects overly-open key file permissions
+ssh -i ~/.ssh/n8n-ec2-key.pem ubuntu@<YOUR_VM_IP>
+```
+
+The default username for Ubuntu AMIs is `ubuntu` (not your AWS account name — this trips up first-time EC2 users coming from GCP, where the SSH username is derived from your Google account).
+
+### 2.2 — Clone and run setup
+
+```bash
+git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
+cd YOUR_REPO
+sudo bash deploy/setup-aws.sh
+```
+
+The script will:
+1. Install Docker and Docker Compose
+2. Set up a 2GB swapfile if none is active yet (required on the 1GB-RAM `t2.micro`/`t3.micro` — see `TROUBLESHOOTING.md`; set `LOW_MEMORY=false` before the command above to skip this on a larger instance)
+3. Create the Docker volumes n8n/Caddy data lives in
+4. Ask for n8n username and password (protects the web UI)
+5. Open ports 80/443 via iptables **on the VM itself** — this is in addition to, not instead of, the Security Group you configured in Step 1.3. Both must allow the traffic
+6. Pull the pre-built image from GitHub Container Registry and start n8n + Caddy containers
+7. Print your n8n URL
+
+All 3 workflow JSONs are already imported into the image (see Part 1, Step 1) — no manual import needed once the container is up.
+
+Shared logic between this and the GCP script lives in `deploy/setup-common.sh` — only IP autodetection (EC2's IMDSv2 metadata service here, vs. GCP's metadata server) and the walkthrough text are AWS-specific.
+
+### 2.3 — Verify
+
+Open `https://<YOUR_VM_IP>.nip.io` in your browser. You should see the n8n login.
+
+> **If the page doesn't load:**
+> - Wait 1-2 minutes for Caddy to get the SSL certificate from Let's Encrypt
+> - Check containers: `cd /opt/n8n && sudo docker compose ps`
+> - Check logs: `sudo docker compose logs caddy`
+> - **Double-check the Security Group** (Step 1.3) — this is the #1 AWS-specific cause of "nothing loads" that doesn't exist on GCP. `sudo docker compose ps` showing healthy containers but the browser timing out almost always means the Security Group, not Caddy/n8n, is the problem
+
+---
+
+## Step 3: Configure n8n on the VM
+
+Identical to [Part 2, Step 3](#step-3-configure-n8n-on-the-vm) — Google Sheets/Telegram credential setup, connecting credentials to nodes, enabling the Telegram Trigger, and generating an API key all work exactly the same regardless of which cloud n8n runs on. The only value that differs is the redirect URI n8n shows for the Google Sheets OAuth2 credential, which will use your AWS VM's IP: `https://<VM_IP>.nip.io/rest/oauth2-credential/callback`.
+
+---
+
+## Step 4: Set Up GitHub Actions CI/CD
+
+Same flow as [Part 2, Step 4](#step-4-set-up-github-actions-cicd) — generate an SSH key pair, add the public half to the VM, add secrets to GitHub, push a change to test it.
+
+**One naming gotcha:** `.github/workflows/deploy.yml`'s secrets are still named `GCP_VM_IP`/`GCP_SSH_USER`/`GCP_SSH_PRIVATE_KEY` — that's a legacy name from when this project only supported GCP, not a sign you're doing something wrong. Use those exact secret names in GitHub even though your VM is on AWS; the workflow doesn't care which cloud the IP/user/key actually point at.
+
+1. Generate a fresh SSH key pair for CI/CD (don't reuse your EC2 key pair from Step 1.2 — keep the human-login key and the CI/CD key separate):
+   ```bash
+   ssh-keygen -t ed25519 -f ~/.ssh/aws_n8n_deploy -C "github-actions" -N ""
+   ```
+2. Add the public key (`~/.ssh/aws_n8n_deploy.pub`) to the VM's `~/.ssh/authorized_keys` (as the `ubuntu` user):
+   ```bash
+   ssh-copy-id -i ~/.ssh/aws_n8n_deploy.pub -o IdentityFile=~/.ssh/n8n-ec2-key.pem ubuntu@<YOUR_VM_IP>
+   ```
+3. Add these secrets in your repo → **Settings** → **Secrets and variables** → **Actions**:
+
+   | Secret | What to paste |
+   |--------|---------------|
+   | `GCP_VM_IP` | Your EC2 instance's (Elastic) IP, e.g., `54.123.45.67` |
+   | `GCP_SSH_PRIVATE_KEY` | Full contents of `~/.ssh/aws_n8n_deploy` (include `-----BEGIN`/`-----END` lines) |
+   | `GCP_SSH_USER` | `ubuntu` |
+   | `N8N_API_KEY` | API key from Step 3's equivalent of Part 2's 3.5 |
+
+4. Test: edit any of the 3 workflow JSONs, commit, push to `main`, watch the **Actions** tab.
+
+---
+
+## Costs
+
+| Resource | Cost |
+|----------|------|
+| `t2.micro`/`t3.micro` instance | Free for 750 hrs/month during your **first 12 months** only — after that, standard hourly billing applies (check the current [EC2 pricing page](https://aws.amazon.com/ec2/pricing/on-demand/) for your region) |
+| 30 GB gp3 EBS storage | Free tier covers up to 30GB — matches what this guide provisions |
+| Elastic IP (while associated with a running instance) | Free |
+| Elastic IP (unassociated, or instance stopped) | Billed hourly — release it if not in active use |
+| Public IPv4 address | AWS began charging a small hourly fee for public IPv4 addresses in 2024; this is typically covered by free-tier allowances during your first 12 months, but **verify current terms in the AWS Billing console** — this is the one AWS-specific cost GCP's e2-micro path doesn't have |
+| Data transfer out | Free tier covers ~100GB/month — this workflow's traffic is far below that |
+| nip.io domain | Free |
+| Let's Encrypt SSL | Free |
+
+**Unlike Part 2's GCP path, this is not a genuinely indefinite $0/month setup** — budget for either migrating off `t2.micro`/`t3.micro` pricing after 12 months, or terminating the instance before then if you're done testing.
+
+---
+
+## Maintenance Commands
+
+```bash
+# SSH into VM
+ssh -i ~/.ssh/n8n-ec2-key.pem ubuntu@<YOUR_VM_IP>
 
 # Check status
 cd /opt/n8n && sudo docker compose ps
