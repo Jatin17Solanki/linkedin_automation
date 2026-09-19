@@ -199,6 +199,17 @@ Settings tab wins when both are set. Most users should just use the Settings tab
 
 Set env vars in `deploy/.env` (copy from `deploy/.env.example`) for cloud deployments, or pass them as `environment:` values in `docker-compose.yml` for local dev. `n8n_company_search_v1.json` (the on-demand `/search` workflow) uses the same Settings tab and precedence — both workflows stay in sync.
 
+### Updating these values later
+
+On a cloud VM (GCP or AWS), `deploy/setup-gcp.sh`/`setup-aws.sh` only prompt for these once, when they first create `/opt/n8n/.env` — re-running the script later doesn't re-ask or overwrite anything you've already set. To change a value after initial setup (rotate `GEMINI_API_KEY`, fix a mistyped `TELEGRAM_CHAT_ID`, adjust `N8N_MEM_LIMIT`, etc.):
+
+```bash
+sudo nano /opt/n8n/.env      # edit the value directly
+cd /opt/n8n && sudo docker compose up -d   # apply -- a plain `restart` does NOT re-read .env
+```
+
+This applies to any variable in the table above, not just the two the setup script prompts for.
+
 ### Adding multiple cities
 
 Two fields change, both comma-separated lists — `location_geo_id` (Settings tab) / `LOCATION_GEO_ID` (env var) does **not** need to change for multi-city within the same country; it stays at the broad India-level default.
@@ -262,7 +273,24 @@ Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Doc
 - **VM:** GCP e2-micro, Ubuntu 22.04, us-central1-a (always-free tier)
 - **Domain:** `<VM_IP>.nip.io` (free wildcard DNS, no registration)
 - **HTTPS:** Let's Encrypt via Caddy (fully automatic)
-- **Cost:** $0/month (within GCP free tier)
+- **Cost:** $0/month (within GCP free tier — but see the note below before you rely on that)
+
+> **GCP's free tier has two separate parts, easy to conflate:** the **Free Trial** ($300 credit, 90 days) every new account starts on, and the **Always Free** tier (1 e2-micro instance/month, indefinitely) that this whole guide assumes. The Always Free tier only actually applies once you've **upgraded your account out of trial mode** (Billing → Upgrade — still $0 charged as long as you stay inside the always-free quota). If you let the 90-day trial lapse without upgrading, GCP suspends your resources at that boundary regardless of what you're actually using — you never get to "indefinite" at all. Do this before or right after creating your VM below, not after the trial has already run out.
+
+---
+
+## Before You Start — Gather These
+
+Two values the setup script will ask you for in Step 2.2 — get them ready now so you're not stuck mid-setup:
+
+| What | Where to get it | Notes |
+|------|------------------|-------|
+| **Gemini API key** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Free, no billing account needed. Powers the resume-matching % in your notifications. |
+| **Telegram chat ID** | Message **@userinfobot** on Telegram | It replies with your numeric user ID. This is *where* notifications get sent — separate from the bot token below. |
+
+You'll also need a Telegram **bot** (separate from the chat ID above) for Step 3.2 — if you haven't made one yet, message **@BotFather** → `/newbot` now and save the API token it gives you. **Also send your new bot any message right now** (e.g. `/start`) — bots can't message a user who hasn't initiated contact first, and skipping this causes a "chat not found" error later even with a correct token and chat ID.
+
+You can skip either of the first two at the setup script's prompt and set them later (see "Updating these values later" further down) — but having them ready now saves a round trip.
 
 ---
 
@@ -331,10 +359,11 @@ The script will:
 1. Install Docker and Docker Compose
 2. Set up a 2GB swapfile if none is active yet (required on the 1GB-RAM e2-micro — see `TROUBLESHOOTING.md`; set `LOW_MEMORY=false` before the command above to skip this on a larger VM)
 3. Create the Docker volumes n8n/Caddy data lives in
-4. Ask for n8n username and password (protects the web UI)
-5. Open ports 80/443 via iptables
-6. Pull the pre-built image from GitHub Container Registry (`ghcr.io/jatin17solanki/linkedin-automation-n8n:latest` by default — override via `DOCKER_IMAGE` in `deploy/.env` if you've forked the repo and publish your own) and start n8n + Caddy containers
-7. Print your n8n URL
+4. **Ask for n8n username and password** (protects the web UI) — **save these somewhere durable** (password manager, not just your terminal scrollback). This is your login for `https://<VM_IP>.nip.io` once the stack is up, it's not shown again after this prompt, and there's no "forgot password" flow — losing it means manually editing `/opt/n8n/.env` to reset it.
+5. **Ask for your Gemini API key and Telegram chat ID** from "Before You Start" above — each is echoed back and asks you to confirm before accepting it, since a typo here fails silently later (no error, notifications/LLM matching just don't work). Leave either blank to skip and set it later (see "Updating these values later" below).
+6. Open ports 80/443 via iptables
+7. Pull the pre-built image from GitHub Container Registry (`ghcr.io/jatin17solanki/linkedin-automation-n8n:latest` by default — override via `DOCKER_IMAGE` in `deploy/.env` if you've forked the repo and publish your own) and start n8n + Caddy containers
+8. Print your n8n URL
 
 All 3 workflow JSONs are already imported into the image (see Part 1, Step 1) — no manual import needed once the container is up.
 
@@ -486,7 +515,24 @@ Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Doc
 - **Domain:** `<VM_IP>.nip.io` (free wildcard DNS, no registration)
 - **HTTPS:** Let's Encrypt via Caddy (fully automatic)
 
-> **Cost difference from GCP, read before you start:** GCP's e2-micro free tier is **indefinite** (as long as you stay in an eligible region). AWS's free tier for `t2.micro`/`t3.micro` is **750 hours/month for the first 12 months only**, after which normal hourly billing applies (a few dollars/month for this instance class) unless you stop/terminate it. Set a calendar reminder. See **Costs** below for more detail, including a public-IPv4 charge AWS introduced in 2024 that GCP doesn't have an equivalent of.
+> **Cost difference from GCP, read before you start:** GCP's e2-micro can be free indefinitely (1 instance/month in an eligible region), but only once you've upgraded that account out of its 90-day Free Trial (see Part 2's note above) — AWS has no equivalent "upgrade" step to unlock an indefinite tier. AWS's free tier for `t2.micro`/`t3.micro` is **750 hours/month for the first 12 months only, full stop**, after which normal hourly billing applies (a few dollars/month for this instance class) unless you stop/terminate it. Set a calendar reminder. See **Costs** below for more detail, including a public-IPv4 charge AWS introduced in 2024 that GCP doesn't have an equivalent of.
+
+---
+
+## Before You Start — Gather These
+
+Same two values as Part 2 (GCP) — the setup script asks for them in Step 2.2:
+
+| What | Where to get it | Notes |
+|------|------------------|-------|
+| **Gemini API key** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Free, no billing account needed. Powers the resume-matching % in your notifications. |
+| **Telegram chat ID** | Message **@userinfobot** on Telegram | Numeric user ID — where notifications get sent, separate from the bot token below. |
+
+You'll also need a Telegram **bot** (for Step 3 below) — @BotFather → `/newbot`, save the token. **Message your new bot once** (e.g. `/start`) — bots can't message you first, and skipping this causes a "chat not found" error later even with a correct token/chat ID.
+
+You can leave either of the first two blank at the setup script's prompt and set them later (see Part 2's "Updating these values later").
+
+> **New AWS account?** A brand-new account is often placed under a verification hold ("Your account is pending verification... may take up to 2 days") that can block EC2 instance launches entirely — this has nothing to do with this project, it's a standard AWS anti-fraud check. There's no status tracker for it beyond opening a free Support Case (Account and Billing) if it drags past 48 hours. Confirm you can actually launch a `t2.micro` before working through the rest of this section.
 
 ---
 
@@ -562,10 +608,11 @@ The script will:
 1. Install Docker and Docker Compose
 2. Set up a 2GB swapfile if none is active yet (required on the 1GB-RAM `t2.micro`/`t3.micro` — see `TROUBLESHOOTING.md`; set `LOW_MEMORY=false` before the command above to skip this on a larger instance)
 3. Create the Docker volumes n8n/Caddy data lives in
-4. Ask for n8n username and password (protects the web UI)
-5. Open ports 80/443 via iptables **on the VM itself** — this is in addition to, not instead of, the Security Group you configured in Step 1.3. Both must allow the traffic
-6. Pull the pre-built image from GitHub Container Registry and start n8n + Caddy containers
-7. Print your n8n URL
+4. **Ask for n8n username and password** (protects the web UI) — **save these somewhere durable** (password manager, not just your terminal scrollback). This is your login for `https://<VM_IP>.nip.io` once the stack is up, it's not shown again after this prompt, and there's no "forgot password" flow.
+5. **Ask for your Gemini API key and Telegram chat ID** from "Before You Start" above — each is echoed back and asks you to confirm before accepting it, since a typo here fails silently later. Leave either blank to skip and set it later (see Part 2's "Updating these values later").
+6. Open ports 80/443 via iptables **on the VM itself** — this is in addition to, not instead of, the Security Group you configured in Step 1.3. Both must allow the traffic
+7. Pull the pre-built image from GitHub Container Registry and start n8n + Caddy containers
+8. Print your n8n URL
 
 All 3 workflow JSONs are already imported into the image (see Part 1, Step 1) — no manual import needed once the container is up.
 

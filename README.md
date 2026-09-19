@@ -142,7 +142,7 @@ sudo bash deploy/setup-gcp.sh   # or deploy/setup-aws.sh on AWS EC2
 # Then: open https://<VM_IP>.nip.io, connect credentials (workflows are pre-imported)
 ```
 
-See `SETUP_GUIDE.md` Part 2 (GCP) or Part 3 (AWS) for the full VM provisioning walkthrough — GCP's free tier is indefinite, AWS's is 12 months.
+See `SETUP_GUIDE.md` Part 2 (GCP) or Part 3 (AWS) for the full VM provisioning walkthrough. Both scripts prompt interactively for your Gemini API key and Telegram chat ID — have them ready (see each Part's "Before You Start"). Cost-wise: GCP's e2-micro can be free indefinitely, but only if you upgrade the account out of its 90-day Free Trial; AWS's free tier is 12 months, full stop — see each Part's cost note before you commit to one.
 
 GitHub Actions auto-deploys all 3 workflow JSONs on push to main.
 

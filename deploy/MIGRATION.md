@@ -18,8 +18,9 @@ From the **old VM**, run `cat ~/linkedin_automation/deploy/.env` and note down:
 | `N8N_BASIC_AUTH_USER` | Recreate `.env` on new VM |
 | `N8N_BASIC_AUTH_PASSWORD` | Recreate `.env` on new VM |
 | `GEMINI_API_KEY` | Recreate `.env` on new VM |
+| `TELEGRAM_CHAT_ID` | Recreate `.env` on new VM |
 
-The old `VM_IP` is no longer needed — the new VM will have a new IP.
+The old `VM_IP` is no longer needed — the new VM will have a new IP. `setup-gcp.sh` now prompts for all four of these interactively in Step 3.1 below (Gemini/Telegram values are echoed back for confirmation) — have them ready to paste in when asked, rather than typing from memory.
 
 ---
 
@@ -127,8 +128,11 @@ sudo bash deploy/setup-gcp.sh
 `setup-gcp.sh` installs Docker and Docker Compose, sets up the 2GB swapfile
 (required — e2-micro only has 1GB RAM) if none is active yet, and creates the
 Docker volumes below automatically — none of that needs to be done by hand
-anymore. It also prompts you for n8n basic auth username/password and starts
-the stack immediately at the end, which matters for Step 4 below.
+anymore. It then prompts you interactively for all four values from "Before
+You Start" above — **enter the old values you noted in Phase 1 at each
+prompt** (Gemini key and Telegram chat ID are echoed back for confirmation
+before being accepted) rather than skipping them — and starts the stack
+immediately at the end, which matters for Step 4 below.
 
 When it finishes, log out and back in so your user is added to the `docker` group:
 ```bash
@@ -142,20 +146,19 @@ Verify swap is active:
 free -h   # should show ~2G under "Swap"
 ```
 
-**Step 3.2 — Update the `.env` file**
+**Step 3.2 — Verify the `.env` file**
 
-`setup-gcp.sh` already created `~/linkedin_automation/deploy/.env` with `VM_IP`
-and the basic auth credentials you entered interactively. Add the rest of the
-values you noted in Phase 1:
+The script writes `.env` to **`/opt/n8n/.env`** (not the repo checkout's
+`deploy/.env` — that file is only ever a local template, never read by the
+running stack). Confirm all four values landed correctly:
 ```bash
-cat >> ~/linkedin_automation/deploy/.env << 'EOF'
-GEMINI_API_KEY=<from old .env>
-EOF
+sudo cat /opt/n8n/.env
 ```
-
-Then apply it:
+You should see `VM_IP`, `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`,
+`GEMINI_API_KEY`, and `TELEGRAM_CHAT_ID` all populated. If you skipped one at
+the prompt, edit it in now (`sudo nano /opt/n8n/.env`) and apply with:
 ```bash
-cd ~/linkedin_automation/deploy && docker compose -f docker-compose.prod.yml up -d
+cd /opt/n8n && sudo docker compose up -d
 ```
 
 ---
