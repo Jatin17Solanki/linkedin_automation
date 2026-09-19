@@ -572,6 +572,8 @@ New "Resume" tab in the same Google Sheet — two-column Key/Value layout:
 
 **Telegram bot setup:** Each workflow needs its own Telegram bot. The `/jobs` workflow uses one bot, the `/search` workflow uses another. Both bots can message the same chat (same `chatId`).
 
+Full human-facing walkthrough: `SETUP_GUIDE.md` Part 1B.
+
 ## Job Parser Webhook (`/parse-job`)
 
 A stateless webhook that accepts a LinkedIn job URL and returns structured JSON with the parsed job details. Designed as an MCP tool backend for Claude.ai.
@@ -655,13 +657,16 @@ A lightweight Node.js MCP server that exposes the job parser webhook as a tool f
 - **Output:** Formatted text with title, company, location, experience, seniority, apply URL, and full job description
 - **Backend:** POST to `https://<VM_IP>.nip.io/webhook/parse-job`
 
-**Claude Desktop config** (`claude_desktop_config.json`):
+**Claude Desktop config** (`claude_desktop_config.json`) — **the `env` block is required**, `mcp-server/index.js` reads `MCP_WEBHOOK_URL` from `process.env` at startup and exits immediately if it's unset:
 ```json
 {
   "mcpServers": {
     "linkedin-job-parser": {
       "command": "node",
-      "args": ["<path-to>/mcp-server/index.js"]
+      "args": ["<path-to>/mcp-server/index.js"],
+      "env": {
+        "MCP_WEBHOOK_URL": "https://<VM_IP>.nip.io/webhook/parse-job"
+      }
     }
   }
 }
@@ -669,8 +674,11 @@ A lightweight Node.js MCP server that exposes the job parser webhook as a tool f
 
 **Setup:**
 1. `cd mcp-server && npm install`
-2. Add the config above to Claude Desktop settings (Developer > Edit Config)
-3. Restart Claude Desktop — the `parse-linkedin-job` tool appears automatically
+2. Import + **activate** the `LinkedIn Job Parser` workflow in n8n first (plain webhook, no HTTPS/cloud required to test — works against a local instance too, `http://localhost:5678/webhook/parse-job`)
+3. Add the config above to Claude Desktop settings (Developer > Edit Config), with `MCP_WEBHOOK_URL` pointing at that instance's real `/webhook/parse-job` URL
+4. Restart Claude Desktop — the `parse-linkedin-job` tool appears automatically
+
+Full human-facing walkthrough: `SETUP_GUIDE.md` Part 1C.
 
 ## V2 Roadmap
 - Auto resume customization

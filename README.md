@@ -148,19 +148,22 @@ GitHub Actions auto-deploys all 3 workflow JSONs on push to main.
 
 ## MCP Server
 
-The `mcp-server/` directory contains a Node.js MCP server that exposes the job parser webhook as a `parse-linkedin-job` tool for Claude.ai.
+The `mcp-server/` directory contains a Node.js MCP server that exposes the job parser webhook as a `parse-linkedin-job` tool for Claude.ai. Full step-by-step (including activating the Job Parser workflow first): `SETUP_GUIDE.md` Part 1C.
 
 ```bash
 cd mcp-server && npm install
 ```
 
-Add to Claude Desktop config:
+Add to Claude Desktop config — **the `env` block is required**, the server refuses to start without `MCP_WEBHOOK_URL` set:
 ```json
 {
   "mcpServers": {
     "linkedin-job-parser": {
       "command": "node",
-      "args": ["/path/to/mcp-server/index.js"]
+      "args": ["/path/to/mcp-server/index.js"],
+      "env": {
+        "MCP_WEBHOOK_URL": "https://<your-host>/webhook/parse-job"
+      }
     }
   }
 }

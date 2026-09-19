@@ -1,6 +1,20 @@
 # LinkedIn Job Search V1 — Setup Guide
 
-> **Local development** setup is below. For **production deployment**, see [Part 2: GCP](#part-2-production-deployment-gcp-e2-micro) or [Part 3: AWS EC2](#part-3-production-deployment-aws-ec2) further down — both use the same Docker Compose + Caddy architecture, so pick whichever cloud you already have an account with.
+This project ships **3 independent workflows** — you don't need all three. Decide what you actually want before you start:
+
+| I want... | Set up | Section |
+|---|---|---|
+| Automated scheduled searches across all my companies, pushed to Telegram | **Main Job Search** workflow | Part 1 (below) — start here, this is the core project |
+| To look up one specific company on demand (`/search Oracle 30`), with a detailed email report | **Company Search** workflow (optional, additive) | [Part 1B](#part-1b-company-search-setup-search--optional) — needs a 2nd Telegram bot + Gmail |
+| Claude.ai to parse LinkedIn job URLs for me | **Job Parser** webhook + MCP server (optional, standalone) | [Part 1C](#part-1c-job-parser--mcp-server-setup-optional) — no Telegram/Sheets needed at all |
+
+All three get **imported automatically** the moment n8n starts (local or cloud) — "setting one up" past that point just means connecting its credentials and activating it. Skip Part 1B/1C entirely if you only want the main workflow; the other two just sit there imported-but-inactive with no side effects.
+
+> **Local vs. cloud:** everything below (Part 1, 1B, 1C) works identically whether n8n is running locally (`docker compose up`, this page) or on a cloud VM ([Part 2: GCP](#part-2-production-deployment-gcp-e2-micro) / [Part 3: AWS EC2](#part-3-production-deployment-aws-ec2)) — only the URL you open in your browser changes (`localhost:5678` vs `https://<VM_IP>.nip.io`). Read Part 2/3 first if you're deploying straight to the cloud without testing locally.
+
+---
+
+# Part 1: Main Job Search Workflow (Local Setup)
 
 ## Prerequisites
 - Docker Desktop running
@@ -256,6 +270,91 @@ The 4 search buckets (title patterns + which companies use "senior" for mid-leve
 | Sheets permission denied | Re-authorize credential |
 | Telegram not sending | Send /start to bot first |
 | Too few results | Increase TIME_WINDOW_SECONDS for testing |
+
+---
+---
+
+# Part 1B: Company Search Setup (`/search` — optional)
+
+On-demand lookup for one specific company (`/search Oracle 30`), with a detailed email report on top of the Telegram reply. **Completely independent of the main workflow above** — has its own Telegram bot, doesn't touch the Results sheet, doesn't affect the main workflow's dedup or schedule. Skip this whole section if you only want scheduled automatic searches.
+
+**Steps 1–5 below work locally right now. Step 6 (activating it) needs HTTPS, so it only actually runs once you've done Part 2 or Part 3 (cloud deployment)** — Company Search's *only* trigger is a Telegram webhook, unlike the main workflow which also offers a Manual/local Webhook trigger for testing. Do steps 1–5 now if you're setting up locally first; just know `/search` itself won't respond until you're on a cloud VM.
+
+### 1 — Confirm the workflow is present
+
+Same as Part 1 Step 4 — open **Workflows** in n8n, confirm `LinkedIn Company Search V1` is listed (auto-imported by Docker, same as the other two).
+
+### 2 — Create a second, separate Telegram bot
+
+Telegram only supports **one webhook per bot** — you can't reuse the bot from Part 1. Message **@BotFather** → `/newbot` → save the new API token. **Message this new bot once** (e.g. `/start`) — same reason as Part 1: bots can't message a user who hasn't initiated contact first.
+
+### 3 — Add the Telegram credential in n8n
+
+**Credentials → Add Credential → Telegram** → paste the *new* bot's token → Save. This is a second, separate Telegram credential from Part 1's — don't reuse that one.
+
+### 4 — Reuse your existing Google Sheets credential
+
+No new OAuth setup needed — Company Search reads the **same** Google Sheet (Config, Settings, Resume tabs) via the **same** Google Sheets credential from Part 1, Step 3. You'll just attach that existing credential to this workflow's nodes in Step 6 below.
+
+### 5 — Set up a Gmail credential (for the email digest)
+
+1. In the same Google Cloud project you used for the Sheets OAuth Client (Part 1, Step 3) — **APIs & Services → Library** → search "Gmail API" → **Enable**
+2. **APIs & Services → Credentials → Create Credentials → OAuth Client ID** (or reuse the existing one — the **gmail.send** scope will be requested on first sign-in either way)
+3. In n8n: **Credentials → Add Credential → Gmail OAuth2** → connect using that Client ID/Secret → sign in, approve the `gmail.send` scope
+4. Open the **Send Gmail** node in the workflow → set **To** to your own email address (this is hardcoded per-node, not an env var — same pattern as Part 1's `sendTo`-style fields)
+
+### 6 — Connect credentials to nodes, then activate (cloud only)
+
+**Google Sheets credential** → `Read Config`, `Read Settings`, `Read Resume`
+**Telegram credential** (the new bot from step 2) → `Send Error Telegram`, `Send No Results Telegram`, `Send Results Telegram`, `Telegram Trigger`
+**Gmail credential** → `Send Gmail`
+
+Once you're on a cloud VM (Part 2/3): open the workflow → **enable** the `Telegram Trigger` node (right-click → Enable, it ships disabled like the main workflow's) → toggle **Active**. n8n registers the webhook with Telegram automatically.
+
+### 7 — Test
+
+Message your **new** bot: `/search Oracle 30`. You should get a Telegram reply, and — if Gemini matching succeeds — a follow-up email.
+
+---
+
+# Part 1C: Job Parser + MCP Server Setup (optional)
+
+A stateless webhook that turns a LinkedIn job URL into structured JSON — no Telegram, no Google Sheets, no credentials at all. Useful standalone, or as a tool Claude.ai can call directly via the included MCP server. Skip this section if you don't need either.
+
+### 1 — Confirm the workflow is present and activate it
+
+Open **Workflows** in n8n, confirm `LinkedIn Job Parser` is listed (auto-imported). Open it → toggle **Active** (top-right) — plain webhooks (unlike Telegram Trigger) don't need HTTPS, so this works locally right now, no cloud deployment required.
+
+### 2 — Test it directly
+
+```bash
+curl -X POST http://localhost:5678/webhook/parse-job \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://linkedin.com/jobs/view/4370408479"}'
+```
+(Swap in a real LinkedIn job URL — replace `localhost:5678` with `https://<VM_IP>.nip.io` once deployed to the cloud.) You should get back structured JSON — title, company, location, experience, description, etc.
+
+If you just wanted the webhook itself (e.g. for your own scripts), you're done — stop here.
+
+### 3 — Set up the MCP server (optional — lets Claude.ai/Claude Desktop call this directly)
+
+1. `cd mcp-server && npm install`
+2. Add this to your Claude Desktop config (Developer → Edit Config) — **the `env` block is required**, `mcp-server/index.js` refuses to start without `MCP_WEBHOOK_URL` set:
+   ```json
+   {
+     "mcpServers": {
+       "linkedin-job-parser": {
+         "command": "node",
+         "args": ["/absolute/path/to/mcp-server/index.js"],
+         "env": {
+           "MCP_WEBHOOK_URL": "http://localhost:5678/webhook/parse-job"
+         }
+       }
+     }
+   }
+   ```
+   Use your n8n instance's real address — `http://localhost:5678/webhook/parse-job` for local, `https://<VM_IP>.nip.io/webhook/parse-job` once deployed to the cloud (Part 2/3).
+3. Restart Claude Desktop — the `parse-linkedin-job` tool appears automatically. Try asking Claude to parse a LinkedIn job URL to confirm it works.
 
 ---
 ---
