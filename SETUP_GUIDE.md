@@ -38,10 +38,10 @@ Tick these off before starting Part 2. "Local" means n8n running on your own com
 | 2 | **Your Telegram chat ID** | Tells the bot *where* to send them | ✅ | ✅ | [1.2](#12-telegram-bots) |
 | 3 | **Gemini API key** | Scores each job against your resume (match %). Optional — without it you get plain, unscored notifications | ✅ | ✅ | [1.3](#13-gemini-api-key) |
 | 4 | **Your own Google Sheet**, created by the bootstrap script | Your company list, settings, resume and job history live here | ✅ | ✅ | [1.4](#14-your-google-sheet-and-your-resume) |
-| 5 | **Your resume as JSON** (optional) | Fills the Sheet's Resume tab for you | ✅ | ✅ | [1.4](#14-your-google-sheet-and-your-resume) |
+| 5 | **Your resume as JSON** — *recommended* | Fills the Sheet's Resume tab; every match % is scored against it | ✅ | ✅ | [1.4](#14-your-google-sheet-and-your-resume) |
 | 6 | **Google OAuth Client ID + Secret** | Lets n8n read and write your Sheet | ✅ | ✅ | [1.5](#15-google-cloud-oauth-client) |
-| 7 | **Telegram bot #2** (token) — *only for Company Search* | Answers your `/search` commands | ❌ cloud only | ✅ | [1.2](#12-telegram-bots) |
-| 8 | **Gmail API enabled** — *only for Company Search's email* | Emails you the detailed report | ❌ cloud only | ✅ | [1.5](#15-google-cloud-oauth-client) |
+| 7 | **Telegram bot #2** (token) — *recommended: it powers Company Search* | Answers your `/search` commands | ❌ cloud only | ✅ | [1.2](#12-telegram-bots) |
+| 8 | **Gmail API enabled** — *for Company Search's email report (recommended)* | Emails you the detailed report | ❌ cloud only | ✅ | [1.5](#15-google-cloud-oauth-client) |
 | 9 | **An AWS or GCP account** | Hosts the always-on VM | — | ✅ | [2B](#2b-on-aws-ec2-recommended-for-cloud) / [2C](#2c-on-gcp) |
 | 10 | **A username and password you'll choose** for the n8n web page | The setup script asks for these; they aren't shown again | — | ✅ | [2B](#2b-on-aws-ec2-recommended-for-cloud) / [2C](#2c-on-gcp) |
 | 11 | **Your search preferences**: companies, location, experience range | Decide now; you can change them any time | ✅ | ✅ | [1.6](#16-decide-your-search-settings) |
@@ -80,9 +80,9 @@ VM public IP:                     (cloud)
 | Bot | Used by | Needed? | What it does |
 |-----|---------|---------|--------------|
 | **Bot #1** | **Job Search** workflow | **Yes** | Sends you the scheduled job digests. On a cloud VM it also answers `/jobs 6` ("search the last 6 hours now") |
-| **Bot #2** | **Company Search** workflow | Only if you want `/search` | Answers `/search Oracle 30` |
+| **Bot #2** | **Company Search** workflow | **Recommended** | Answers `/search Oracle 30` — [4.1](#41-company-search-search) explains why it's worth having |
 
-**Why two?** Telegram delivers a bot's incoming messages to exactly one place, and each of these workflows needs to receive its own commands. Two workflows that both listen for commands therefore need two bots. If you only want the scheduled digests (the core of the project), you need **one bot** and can skip everything about Bot #2 and Company Search.
+**Why two?** Telegram delivers a bot's incoming messages to exactly one place, and each of these workflows needs to receive its own commands. Two workflows that both listen for commands therefore need two bots. The scheduled digests (the core of the project) need only **one bot**, so you *can* start with Bot #1 and add Bot #2 later — but Company Search is worth having, so we recommend creating both now while you're talking to BotFather.
 
 <!-- SCREENSHOT SLOT: docs/images/two-bots.png — side-by-side of the two bot chats -->
 
@@ -113,15 +113,15 @@ Message **@userinfobot** on Telegram. It replies with your numeric ID (e.g. `951
 1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and sign in.
 2. **Create API key** and copy it into your scratch note.
 
-The free tier needs no billing account, and works even if your GCP free trial has expired — this key has nothing to do with GCP billing. It's used to compare each job description against your resume and produce the match percentage. **You can skip it:** without a key (or if Gemini is briefly unavailable) you still get notifications, just without match % — the message says "AI matching unavailable this run".
+The free tier needs no billing account, and works even if your GCP free trial has expired — this key has nothing to do with GCP billing. It's used to compare each job description against your resume and produce the match percentage. **Privacy:** on the free tier, Google may use what you send to improve its products, and human reviewers may read it ([Google's terms](https://ai.google.dev/gemini-api/terms)) — which is why the resume prompt below leaves out your phone, email and links. Per the same terms a paid key isn't used that way. **You can skip it:** without a key (or if Gemini is briefly unavailable) you still get notifications, just without match % — the message says "AI matching unavailable this run".
 
 ## 1.4 Your Google Sheet (and your resume)
 
 Everything you'd want to change day-to-day lives in a Google Sheet you own: your company list, your settings, your resume and the history of jobs already sent. A one-off script builds it for you.
 
-### Step 1 — Turn your resume into JSON (optional, recommended)
+### Step 1 — Turn your resume into JSON (recommended)
 
-The Sheet has a **Resume** tab that the AI reads to score jobs. Filling 12 rows by hand is fiddly, so let any AI chat tool do it: paste the prompt below into ChatGPT, Claude, Gemini or whichever you use, and attach or paste your resume where it says. It replies with **one code block** — click that block's **copy** button.
+The Sheet has a **Resume** tab that the AI reads to score jobs — **every match % is calculated against it**, so the more accurate it is, the more meaningful your ranked list becomes (and the more useful `min_match_percent` is). Filling 12 rows by hand is fiddly, so let any AI chat tool do it: paste the prompt below into ChatGPT, Claude, Gemini or whichever you use, and attach or paste your resume where it says. It replies with **one code block** — click that block's **copy** button.
 
 <details>
 <summary><strong>The resume → JSON prompt (click to expand)</strong></summary>
@@ -157,7 +157,7 @@ Resume:
 
 </details>
 
-Prefer not to? Skip this step: the script fills the Resume tab with placeholders and you edit it by hand afterwards.
+Prefer to type it yourself? Skip this step: the script fills the Resume tab with placeholders, and you **must** replace every one of them by hand — scores calculated against placeholder text are meaningless.
 
 ### Step 2 — Create the Sheet and run the bootstrap script
 
@@ -174,7 +174,7 @@ Prefer not to? Skip this step: the script fills the Resume tab with placeholders
      …
    }`;
    ```
-   Keep the backticks — it has to be backticks (not quotes) because the JSON spans many lines.
+   Keep the backticks — it has to be backticks (not quotes) because the JSON spans many lines. (The `String.raw` in front is a safety net, not a requirement: plain backticks also work for most resumes. It just stops a quote mark or backslash in your text from being misread. Leave it as it is and paste between the backticks.)
 4. Save (Ctrl/Cmd+S).
 5. In the toolbar, pick **`bootstrap`** in the function dropdown, then click **Run** ▶.
 6. **The first run asks for permission — this is expected.** You'll go through:
@@ -351,7 +351,7 @@ Continue to [Part 3](#part-3-connect-n8n-to-your-accounts).
 
 ## 2C On GCP
 
-GCP works the same way, with one billing catch, and it's the less-tested path in this project — which is why AWS is recommended.
+GCP works the same way, with one billing catch. This project originally ran on a GCP VM in production, but the rewritten setup script and this walkthrough haven't yet been re-run on a fresh GCP VM — which is why AWS, the path exercised end to end, is the recommended one.
 
 ```
 Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Docker volume)
@@ -477,17 +477,19 @@ Because the window is only 24 hours, a first run can easily return **zero jobs**
 
 Toggle **Active** (top right). From now on it runs by itself on a schedule — **eight times a day**, not just morning and evening. The times, and how to change them, are in [5.5](#55-schedule-and-time-window).
 
-That's the core project running. Everything after this is optional or tuning.
+That's the core project running. **Recommended next: [Company Search](#41-company-search-search)** (on-demand `/search` lookups and email reports — needs a cloud VM). Everything else after that is optional or tuning.
 
 ---
 
 # Part 4: The optional workflows
 
-The project ships two more workflows. They were imported alongside the main one and sit there **inactive and harmless** until you connect them — skip this whole part if you only want the scheduled digests.
+The project ships two more workflows. They were imported alongside the main one and sit there **inactive and harmless** until you connect them. **We recommend Company Search (4.1)** — it's the part you'll reach for day to day when you want to look at one company right now. Job Parser + MCP (4.2) is a niche extra; skip it unless you use Claude Desktop.
 
 ## 4.1 Company Search (`/search`)
 
 **What it is:** message the second bot `/search Oracle 30` and it looks up that one company's openings from the last 30 days (default 7; anything from 1–90), replies on Telegram with match scores, and — if configured — emails a detailed report with a summary and skill gaps per job. It's on-demand and stateless: it doesn't touch the Results tab, doesn't dedupe against the scheduled runs, and works for **any company in your Config tab whether or not it's `Active`**.
+
+**Why it's worth having:** it answers "what's open at X right now?" without waiting for the next digest; a company you set to `Active = FALSE` is left out of the scheduled digest but stays searchable here, so you can keep a long Config list and push only your priorities to your phone; and the email report explains *why* each role matches and where the gaps are.
 
 **Where you can do it: cloud only.** Its only trigger is a Telegram webhook, which needs a public HTTPS address — so it only responds on a VM ([2B](#2b-on-aws-ec2-recommended-for-cloud) / [2C](#2c-on-gcp)). Do these steps in your **cloud** n8n; credentials belong to one n8n instance, so ones you made in a local n8n don't carry over.
 
@@ -557,6 +559,13 @@ Open your Sheet → **Config** tab. Columns: `Company | CompanyID | Bucket | Act
 - **Remove:** delete the row.
 
 **Finding a company's LinkedIn ID.** It's a number, and it isn't in the company page's web address. Go to LinkedIn → **Jobs**, search anything, then use the **Company** filter and pick your company from LinkedIn's dropdown. The address bar now contains `f_C=<number>` — that number is the `CompanyID`.
+
+**Adding a company, step by step**
+
+1. Get its `CompanyID` as above.
+2. In the Config tab add a row at the bottom: **Company** (the name — `/search` matches against this text), **CompanyID** (the number), **Bucket** (**4** unless you know better — next section), **Active**, **Notes** (anything you like).
+3. **Active**: `TRUE` includes it in the scheduled digest; `FALSE` keeps it out of the digest but still available to `/search`.
+4. That's it — it takes effect on the next run, no restart. To add many at once, paste several rows under the existing ones (keep the header row).
 
 ### What the buckets are, and why they exist
 
@@ -771,6 +780,8 @@ The Docker image copies the three workflows into n8n **only the first time a con
 3. **`deploy/import-workflow.sh`** (what the optional CI/CD in 6.1 runs) updates a workflow in place through the API. The same reset applies.
 
 Updating n8n's own image: `cd /opt/n8n && sudo docker compose pull n8n && sudo docker compose up -d`.
+
+**Changes to the Docker Compose file** (for example the telemetry-off settings added later) also don't reach a VM you set up earlier, because the setup script copies `deploy/docker-compose.prod.yml` to `/opt/n8n/docker-compose.yml` once. To pick them up: `cd ~/linkedin_automation && git pull && sudo cp deploy/docker-compose.prod.yml /opt/n8n/docker-compose.yml && cd /opt/n8n && sudo docker compose up -d`. Your `.env` (keys, passwords) and your data volumes are untouched.
 
 ## 6.3 Costs
 

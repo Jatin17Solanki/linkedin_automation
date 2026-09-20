@@ -18,7 +18,7 @@ It's built with [n8n](https://n8n.io) (a visual workflow tool), Google Sheets (w
 
 ### 1. A scheduled job digest — from Bot #1
 
-Eight times a day, one message lists everything new, best match first. 🟢 is a strong match, 🟡 a decent one, 🔴 a long shot.
+By default it runs **eight times a day** — and you can change that to whatever times suit you ([how](SETUP_GUIDE.md#55-schedule-and-time-window)). Each run sends **one message to your Telegram chat** listing everything new, best match first. Bot #1 posts to the chat ID you configure, and that same chat is where you message it commands such as `/jobs 6`. 🟢 is a strong match, 🟡 a decent one, 🔴 a long shot.
 
 ```
 🔔 3 New Openings Found
@@ -40,7 +40,7 @@ Eight times a day, one message lists everything new, best match first. 🟢 is a
 
 <!-- SCREENSHOT SLOT: docs/images/digest.png — real Telegram screenshot of the scheduled digest (Bot #1) -->
 
-### 2. An on-demand company lookup — from Bot #2
+### 2. An on-demand company lookup — from Bot #2 (recommended)
 
 Curious about one company right now? Message the second bot:
 
@@ -59,6 +59,14 @@ Curious about one company right now? Message the second bot:
 
 It also emails you a fuller report: a one-line summary of each role, the skills you match, and the gaps. (Partial names work — `/search clear` finds ClearTrip and ClearTax.)
 
+**Why it's worth setting up:**
+
+- **Look at any company, any time**, for any window from 1 to 90 days — before you apply, or for companies that post rarely and hardly ever show up in a digest.
+- **Your digest list doesn't limit it.** A company set to `Active = FALSE` in your Sheet stays out of the scheduled digest but is still searchable here, so you can keep a long Config list and switch on only the companies you want pushed to you.
+- **It shows everything in the window**, not just what's new since the last digest.
+- **The email report tells you *why* a role matches** and where the gaps are, which helps you decide whether to apply.
+- It needs a cloud VM (see [Choose your setup](#choose-your-setup)) — one more reason to go cloud.
+
 <!-- SCREENSHOT SLOT: docs/images/search.png — real Telegram screenshot of /search (Bot #2) -->
 <!-- SCREENSHOT SLOT: docs/images/email.png — the Gmail report -->
 
@@ -74,7 +82,7 @@ Telegram sends a bot's incoming commands to exactly one place. The scheduled dig
 |---|---|---|
 | **Workflow** | Job Search | Company Search |
 | **Does** | Sends the digests; on a cloud VM also answers `/jobs 6` | Answers `/search Oracle 30` |
-| **Needed?** | Yes | Only if you want `/search` |
+| **Needed?** | Yes | **Recommended** (you can add it later) |
 
 Creating a bot takes a minute — the [setup guide](SETUP_GUIDE.md#12-telegram-bots) walks through it.
 
@@ -88,7 +96,7 @@ Creating a bot takes a minute — the [setup guide](SETUP_GUIDE.md#12-telegram-b
 | **Company Search** | `/search Company [days]` on Telegram | On-demand lookup + email report | ❌ needs a cloud VM |
 | **Job Parser** | A web request | Structured JSON for one job URL | ✅ |
 
-You only *need* the first. The other two are already inside the project and stay dormant until you turn them on.
+The first is the core. **We recommend Company Search too** — it's what you'll reach for whenever you want to look at one company right now. Job Parser is a niche extra. All three are already inside the project and stay dormant until you turn them on.
 
 ## Features
 
@@ -99,6 +107,18 @@ You only *need* the first. The other two are already inside the project and stay
 - **Gentle on LinkedIn** — waits between requests; it reads only public job pages.
 - **Graceful** — if the AI fails you still get your list.
 - **Multi-city** — search one city or several at once.
+
+## Privacy and cost
+
+**You run it, you own it.** The software is free and open source (MIT). It runs on a machine you control — your own computer or your own cloud VM — with no account, hosted service or analytics from the author. Your company list, settings, resume summary and job history live in a Google Sheet **you** own (keep it private — never "anyone with the link"), and nothing is sent to the author.
+
+**What does leave your setup — worth knowing:**
+
+- **Gemini (the AI scoring).** Each job description and your resume summary are sent to Google's Gemini API. On the **free tier**, Google's terms say it may use that content to improve its products and that human reviewers may read it ([terms](https://ai.google.dev/gemini-api/terms)) — which is why the resume prompt leaves out your phone, email and links. If that isn't acceptable to you, use a **paid** Gemini key (the same terms say paid usage isn't used to improve Google's products) or leave the key blank and get unscored lists.
+- **Telegram and Gmail** carry the messages and the email you asked for. **LinkedIn** sees ordinary requests for public job pages from your server's address.
+- **n8n's own telemetry.** Stock n8n sends anonymous usage data and version checks by default. This project's Docker Compose files switch both off (`N8N_DIAGNOSTICS_ENABLED=false`, `N8N_VERSION_NOTIFICATIONS_ENABLED=false`). A VM you set up earlier keeps its old compose file until you update it — see [Updating an existing instance](SETUP_GUIDE.md#62-updating-an-existing-instance).
+
+**Cost:** the software and Gemini's free tier cost nothing. The always-on VM is free for a while (AWS: a 6-month plan for new accounts; GCP: free indefinitely once you upgrade out of the trial) and then a few dollars a month — see [Costs](SETUP_GUIDE.md#63-costs). Running it on your own computer is free.
 
 ## Choose your setup
 
@@ -113,7 +133,7 @@ You need somewhere for n8n to run. Three options:
 | **`/jobs` and `/search` from your phone** | ❌ | ✅ | ✅ |
 | **Company Search + email report** | ❌ | ✅ | ✅ |
 | **Job Parser / Claude tool** | ✅ | ✅ | ✅ |
-| **Status in this project** | Tested | **Tested end to end** | Written, not yet run end to end |
+| **Status in this project** | Tested | **Tested end to end** | Ran in production originally; the rewritten setup script hasn't been re-run on a fresh VM yet |
 
 **What doesn't work on your own computer:** anything you trigger by *messaging a bot*. Telegram delivers commands to a public HTTPS address, which a laptop doesn't have. So the `/jobs N` command and the entire Company Search workflow need a cloud VM. The scheduled digest works locally — but only while your machine is running.
 
@@ -122,6 +142,13 @@ You need somewhere for n8n to run. Three options:
 ## Get started
 
 Everything is in the **[Setup Guide](SETUP_GUIDE.md)**. It starts with a checklist so you gather every key and account *first* and never have to stop halfway.
+
+### Two "optional" steps we recommend
+
+Both can be skipped, but both make the project far more useful:
+
+1. **Load your real resume.** Every match % is computed against whatever is in your Sheet's Resume tab, so it has to hold your actual details — otherwise the scores, the ordering and the `min_match_percent` filter mean little. The Setup Guide gives you a prompt that turns your resume into the right format with one paste ([Step 1.4](SETUP_GUIDE.md#14-your-google-sheet-and-your-resume)).
+2. **Set up Company Search (Bot #2).** It adds on-demand `/search` lookups and the email report ([Step 4.1](SETUP_GUIDE.md#41-company-search-search)). Cloud only.
 
 **Index**
 
@@ -146,11 +173,22 @@ sudo bash deploy/setup-aws.sh     # or deploy/setup-gcp.sh on GCP
 docker compose up -d --build      # then open http://localhost:5678
 ```
 
+## Stuck? Let an AI assistant walk you through it
+
+Setup means a lot of small steps across several websites. If you find it hard to navigate on your own, open an AI coding assistant (Claude Code, Cursor, Copilot — any that can read files) in a copy of this repo and tell it:
+
+> Read `CLAUDE.md`, then help me set this up. I want to run it on **[my computer / AWS / GCP]**.
+
+[`CLAUDE.md`](CLAUDE.md) is written for exactly that. It tells the assistant to follow the same order as the Setup Guide, what it can and can't do for you, and how the project works — so it can also help you troubleshoot and customize afterwards. (Claude Code loads it automatically; with other assistants, ask them to read it.)
+
+Two habits help: **don't paste secrets** (bot tokens, API keys, OAuth secrets) into a chat — a good assistant tells you *where* each one goes instead — and when something fails, share the **error message or the n8n execution output** so it can diagnose rather than guess.
+
 ## How the search is tuned
 
 You don't have to touch any of this to get started — the defaults are Bengaluru, roles asking for up to 4 years, and ~50 pre-loaded companies. When you're ready:
 
-- **Companies and buckets.** Each company in your Sheet's Config tab sits in one of four "buckets" that decide how it's searched (companies label the same level differently — "SDE II", "Level 3", plain "Software Engineer"). New company? Put it in Bucket 4. [Why buckets exist →](SETUP_GUIDE.md#51-companies-and-buckets)
+- **Adding companies.** Your Sheet's Config tab *is* the list, and the ~50 pre-loaded companies are only a starting point. To add one: (1) find its LinkedIn company ID — on LinkedIn Jobs use the **Company** filter and read `f_C=` from the address bar; (2) add a row with the name and that ID; (3) set **Bucket to 4** unless you know better; (4) `Active = TRUE` to include it in the scheduled digest, or `FALSE` to keep it searchable only through `/search`. Takes effect on the next run, no restart. [Step by step →](SETUP_GUIDE.md#51-companies-and-buckets)
+- **Buckets.** Each company sits in one of four "buckets" that decide how it's searched (companies label the same level differently — "SDE II", "Level 3", plain "Software Engineer"). New company? Bucket 4. [Why buckets exist →](SETUP_GUIDE.md#51-companies-and-buckets)
 - **Title filters.** Staff, principal, manager, QA, devops and similar are dropped automatically; "senior" is dropped only where it really means a step up. [Where and how to change →](SETUP_GUIDE.md#52-title-filters)
 - **Location.** Bengaluru by default; any city or several at once, set in the Sheet. [Finding a city's code →](SETUP_GUIDE.md#53-location-and-multiple-regions)
 - **Experience.** You give a bracket like "3 to 5 years"; a role is kept if its own range overlaps yours. Permissive on purpose: better one extra role to glance at than a good one silently missed. [Details →](SETUP_GUIDE.md#54-experience-range)

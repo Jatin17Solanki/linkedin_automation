@@ -66,10 +66,12 @@ var RESULTS_HEADERS = [
 // of getting placeholder values, e.g.
 //     var RESUME_JSON = String.raw`{ "name": "...", ... }`;
 // It must be backticks, not quotes: the JSON usually spans many lines, which a
-// quoted string can't hold. It must be String.raw`...` (not plain `...`) so
-// escape sequences such as \" and \n inside your resume text reach JSON.parse
-// untouched. The only two things that can break it are a backtick character or
-// the two characters ${ inside your resume text; remove or reword those.
+// quoted string can't hold. The String.raw in front is a safety net rather than
+// a requirement: plain backticks also work for most resumes, but with String.raw
+// a quote mark or backslash escape inside your resume text can't be misread by
+// JSON.parse. Just paste between the backticks. The only things that can break
+// it are a backtick character or the two characters ${ inside your text; remove
+// or reword those.
 // Leave it empty (as shipped) to skip this and use the placeholder values.
 var RESUME_JSON = String.raw``;
 
