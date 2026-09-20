@@ -20,44 +20,17 @@ It's built with [n8n](https://n8n.io) (a visual workflow tool), Google Sheets (w
 
 By default it runs **eight times a day** — and you can change that to whatever times suit you ([how](SETUP_GUIDE.md#55-schedule-and-time-window)). Each run sends **one message to your Telegram chat** listing everything new, best match first. Bot #1 posts to the chat ID you configure, and that same chat is where you message it commands such as `/jobs 6` (the number is **hours**: "search the last 6 hours now"). 🟢 is a strong match, 🟡 a decent one, 🔴 a long shot.
 
-```
-🔔 3 New Openings Found
+<p align="center"><img src="docs/images/job_bot.jpeg" width="340" alt="Telegram chat with the Job Alert bot: /jobs 48 returns 8 new openings ranked by match percentage"></p>
 
-1. 🟢 82% — SDE II (3-5 yrs) [SDE-II]
-   📍 Bengaluru, India
-   🔗 https://linkedin.com/jobs/view/123
-
-2. 🟡 65% — Software Engineer (3+ yrs) [Backend]
-   📍 Bengaluru, India
-   🔗 https://linkedin.com/jobs/view/456
-
-3. 🔴 38% — Cloud Engineer (5+ yrs) [Generic]
-   📍 Bengaluru, India
-   🔗 https://linkedin.com/jobs/view/789
-```
-
-*(Illustrative sample.)* Nothing new? You get a one-line "ran fine, no new openings" so you know it's alive. If the AI is unavailable one run, you still get the list, unscored, with a warning.
-
-<!-- SCREENSHOT SLOT: docs/images/digest.png — real Telegram screenshot of the scheduled digest (Bot #1) -->
+That is real output: `/jobs 48` searched the last 48 hours, and each opening shows its match %, company, title, required experience, location and link. Nothing new? You get a one-line "ran fine, no new openings" so you know it's alive. If the AI is unavailable one run, you still get the list, unscored, with a warning.
 
 ### 2. An on-demand company lookup — from Bot #2 (recommended)
 
 Curious about one company right now? Message the second bot — the number at the end is **days** (default 7, anywhere from 1 to 90):
 
-```
-/search Oracle 30
-```
+<p align="center"><img src="docs/images/search_bot.jpeg" width="340" alt="Telegram chat with the Company Alert bot: /search Amazon 1 returns 3 openings"></p>
 
-```
-🔍 Jobs at Oracle (last 30 days) — 5 openings
-
-1. 🟢 82% — Software Engineer III (3-5 yrs) [SE-III]
-   📍 Bengaluru, India
-   🔗 https://linkedin.com/jobs/view/123
-   …
-```
-
-It also emails you a fuller report: a one-line summary of each role, the skills you match, and the gaps. (Partial names work — `/search clear` finds ClearTrip and ClearTax.)
+Real output again: `/search Amazon 1` looked at Amazon's openings from the last **1 day**. It also emails you a fuller report: a one-line summary of each role, the skills you match, and the gaps. (Partial names work — `/search clear` finds ClearTrip and ClearTax.)
 
 **Why it's worth setting up:**
 
@@ -67,8 +40,9 @@ It also emails you a fuller report: a one-line summary of each role, the skills 
 - **The email report tells you *why* a role matches** and where the gaps are, which helps you decide whether to apply.
 - It needs a cloud VM (see [Choose your setup](#choose-your-setup)) — one more reason to go cloud.
 
-<!-- SCREENSHOT SLOT: docs/images/search.png — real Telegram screenshot of /search (Bot #2) -->
-<!-- SCREENSHOT SLOT: docs/images/email.png — the Gmail report -->
+The email report for that same search:
+
+<p align="center"><img src="docs/images/email.jpeg" width="340" alt="Gmail report for the Amazon search: each opening as a card with match %, summary, matching skills and gaps"></p>
 
 ### 3. A LinkedIn job parser for Claude — optional
 
@@ -95,7 +69,6 @@ Type just the number: `/jobs 6h` and `/search Oracle 30d` don't work. As a rule 
 
 Creating a bot takes a minute — the [setup guide](SETUP_GUIDE.md#12-telegram-bots) walks through it.
 
-<!-- SCREENSHOT SLOT: docs/images/two-bots.png — the two bot chats side by side -->
 
 ## The three workflows
 
@@ -112,6 +85,7 @@ The first is the core. **We recommend Company Search too** — it's what you'll 
 - **Config-driven** — your companies, city, experience range and match threshold live in a Google Sheet you edit in a browser. No code, no restarts.
 - **Smart filtering** — drops staff/principal/manager/QA/devops roles, other cities, and roles asking for more experience than your target range.
 - **AI matching** — Gemini scores each role against your resume (skills 40%, experience 30%, domain 20%, seniority 10%). Optionally hide anything below a match % you choose.
+- **Complete results** — reads every page LinkedIn returns for a search (up to 300 per company group per run), not just the first page.
 - **No repeats** — remembers every job it has shown you.
 - **Gentle on LinkedIn** — waits between requests; it reads only public job pages.
 - **Graceful** — if the AI fails you still get your list.
@@ -194,9 +168,9 @@ Two habits help: **don't paste secrets** (bot tokens, API keys, OAuth secrets) i
 
 ## How the search is tuned
 
-You don't have to touch any of this to get started — the defaults are Bengaluru, roles asking for up to 4 years, and ~50 pre-loaded companies. When you're ready:
+You don't have to touch any of this to get started — the defaults are Bengaluru, roles asking for up to 4 years, and 94 pre-loaded companies. When you're ready:
 
-- **Adding companies.** Your Sheet's Config tab *is* the list, and the ~50 pre-loaded companies are only a starting point. To add one: (1) find its LinkedIn company ID — on LinkedIn Jobs use the **Company** filter and read `f_C=` from the address bar; (2) add a row with the name and that ID; (3) set **Bucket to 4** unless you know better; (4) `Active = TRUE` to include it in the scheduled digest, or `FALSE` to keep it searchable only through `/search`. Takes effect on the next run, no restart. [Step by step →](SETUP_GUIDE.md#51-companies-and-buckets)
+- **Adding companies.** Your Sheet's Config tab *is* the list, and the 94 pre-loaded companies are only a starting point. To add one: (1) find its LinkedIn company ID — on LinkedIn Jobs use the **Company** filter and read `f_C=` from the address bar; (2) add a row with the name and that ID; (3) set **Bucket to 4** unless you know better; (4) `Active = TRUE` to include it in the scheduled digest, or `FALSE` to keep it searchable only through `/search`. Takes effect on the next run, no restart. [Step by step →](SETUP_GUIDE.md#51-companies-and-buckets)
 - **Buckets.** Each company sits in one of four "buckets" that decide how it's searched (companies label the same level differently — "SDE II", "Level 3", plain "Software Engineer"). New company? Bucket 4. [Why buckets exist →](SETUP_GUIDE.md#51-companies-and-buckets)
 - **Title filters.** Staff, principal, manager, QA, devops and similar are dropped automatically; "senior" is dropped only where it really means a step up. [Where and how to change →](SETUP_GUIDE.md#52-title-filters)
 - **Location.** Bengaluru by default; any city or several at once, set in the Sheet. [Finding a city's code →](SETUP_GUIDE.md#53-location-and-multiple-regions)

@@ -65,7 +65,8 @@
           "id": "CONFIGURE_ME",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "id": "b2000001-0001-0001-0001-000000000004",
@@ -146,7 +147,7 @@
         -200
       ],
       "parameters": {
-        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst matches = staticData.matchedCompanies || [];\nconst seconds = staticData.timeWindowSeconds || 604800; // default 7 days\n\nconst LOCATION = 'India';\n// Settings tab (Read Settings/Store Settings, above) > env var > hardcoded default\nconst settings = staticData.settings || {};\nconst GEO_ID = (settings.location_geo_id || '').trim() || $env.LOCATION_GEO_ID || '102713980';\nconst LOCATION_FILTER = (settings.location_f_pp || '').trim() || $env.LOCATION_F_PP || '105214831'; // f_PP place ID(s) -- comma-separated for multi-city; see LOCATION_F_PP / Settings tab\n\n// Bucket keyword templates (same as main workflow)\nconst bucketKeywords = {\n  '1': '\"software development engineer\" OR \"SDE\" OR \"SDE II\" OR \"SDE 2\" OR \"SDE-II\" OR \"software engineer II\" OR \"software engineer 2\" OR \"software engineer - II\"',\n  '2': '\"software engineer III\" OR \"software engineer 3\" OR \"software developer 3\"',\n  '3': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"Senior Member, Tech\" OR \"member of technical staff\"',\n  '4': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"'\n};\n\n// Group matched companies by bucket\nconst buckets = {};\nfor (const m of matches) {\n  const bucket = String(m.Bucket);\n  if (!buckets[bucket]) buckets[bucket] = [];\n  buckets[bucket].push(String(m.CompanyID));\n}\n\n// Build one URL per bucket\nconst urls = [];\nfor (const [bucket, companyIds] of Object.entries(buckets)) {\n  const keywords = bucketKeywords[bucket];\n  if (!keywords || companyIds.length === 0) continue;\n\n  const encodedKeywords = encodeURIComponent(keywords);\n  const companyFilter = companyIds.join(',');\n  const encodedLocation = encodeURIComponent(LOCATION);\n\n  const url = `https://www.linkedin.com/jobs/search/?keywords=${encodedKeywords}&f_C=${companyFilter}&f_TPR=r${seconds}&location=${encodedLocation}&geoId=${GEO_ID}&f_PP=${LOCATION_FILTER}&sortBy=DD`;\n\n  urls.push({\n    url: url,\n    bucket: bucket,\n    companyCount: companyIds.length\n  });\n}\n\n// Initialize accumulator\nstaticData.foundJobLinks = [];\n\nconsole.log(`Built ${urls.length} search URL(s) for ${matches.length} matched company/companies`);\n\nif (urls.length === 0) {\n  return [{json: {url: '', bucket: '0', companyCount: 0, noUrls: true}}];\n}\n\nreturn urls.map(u => ({json: u}));"
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst matches = staticData.matchedCompanies || [];\nconst seconds = staticData.timeWindowSeconds || 604800; // default 7 days\n\nconst LOCATION = 'India';\n// Settings tab (Read Settings/Store Settings, above) > env var > hardcoded default\nconst settings = staticData.settings || {};\nconst GEO_ID = (settings.location_geo_id || '').trim() || $env.LOCATION_GEO_ID || '102713980';\nconst LOCATION_FILTER = (settings.location_f_pp || '').trim() || $env.LOCATION_F_PP || '105214831'; // f_PP place ID(s) -- comma-separated for multi-city; see LOCATION_F_PP / Settings tab\n\n// Bucket keyword templates (same as main workflow)\nconst bucketKeywords = {\n  '1': '\"software development engineer\" OR \"SDE\" OR \"SDE II\" OR \"SDE 2\" OR \"SDE-II\" OR \"software engineer II\" OR \"software engineer 2\" OR \"software engineer - II\"',\n  '2': '\"software engineer III\" OR \"software engineer 3\" OR \"software developer 3\"',\n  '3': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"Senior Member, Tech\" OR \"member of technical staff\"',\n  '4': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\"'\n};\n\n// Group matched companies by bucket\nconst buckets = {};\nfor (const m of matches) {\n  const bucket = String(m.Bucket);\n  if (!buckets[bucket]) buckets[bucket] = [];\n  buckets[bucket].push(String(m.CompanyID));\n}\n\n// Build one URL per bucket\nconst urls = [];\nfor (const [bucket, companyIds] of Object.entries(buckets)) {\n  const keywords = bucketKeywords[bucket];\n  if (!keywords || companyIds.length === 0) continue;\n\n  const encodedKeywords = encodeURIComponent(keywords);\n  const companyFilter = companyIds.join(',');\n  const encodedLocation = encodeURIComponent(LOCATION);\n\n  const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodedKeywords}&f_C=${companyFilter}&f_TPR=r${seconds}&location=${encodedLocation}&geoId=${GEO_ID}&f_PP=${LOCATION_FILTER}&sortBy=DD`;\n\n  urls.push({\n    url: url,\n    bucket: bucket,\n    companyCount: companyIds.length\n  });\n}\n\n// Initialize accumulator\nstaticData.foundJobLinks = [];\nstaticData.searchStart = 0;\nstaticData.searchPages = 0;\n\nconsole.log(`Built ${urls.length} search URL(s) for ${matches.length} matched company/companies`);\n\nif (urls.length === 0) {\n  return [{json: {url: '', bucket: '0', companyCount: 0, noUrls: true}}];\n}\n\nreturn urls.map(u => ({json: u}));"
       }
     },
     {
@@ -190,7 +191,10 @@
           "timeout": 30000
         }
       },
-      "continueOnFail": true
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "id": "b2000001-0001-0001-0001-000000000011",
@@ -209,25 +213,25 @@
             {
               "key": "links",
               "attribute": "href",
-              "cssSelector": "ul.jobs-search__results-list li div a[class*='base-card']",
+              "cssSelector": "li div a[class*='base-card']",
               "returnArray": true,
               "returnValue": "attribute"
             },
             {
               "key": "titles",
-              "cssSelector": "ul.jobs-search__results-list h3.base-search-card__title",
+              "cssSelector": "h3.base-search-card__title",
               "returnArray": true,
               "returnValue": "text"
             },
             {
               "key": "companies",
-              "cssSelector": "ul.jobs-search__results-list h4.base-search-card__subtitle",
+              "cssSelector": "h4.base-search-card__subtitle",
               "returnArray": true,
               "returnValue": "text"
             },
             {
               "key": "locations",
-              "cssSelector": "ul.jobs-search__results-list span.job-search-card__location",
+              "cssSelector": "span.job-search-card__location",
               "returnArray": true,
               "returnValue": "text"
             }
@@ -246,7 +250,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst foundLinks = staticData.foundJobLinks || [];\n\nconst currentBucket = $('Loop Over URLs').first().json.bucket || '0';\n\nconst data = $input.first().json;\nconst links = data.links || [];\nconst titles = data.titles || [];\nconst companies = data.companies || [];\nconst locations = data.locations || [];\n\n// ============================================================\n// NEGATIVE TITLE FILTER (same as main workflow)\n// ============================================================\nconst negativeBase = /\\b(staff|principal|lead|manager|director|ios|android|machine.?learning|data.?scien|QA|SDET|devops|SRE|site.?reliability|frontend|front.?end|intern|test.?engineer|test.?auto|platform.?engineer|infra.?engineer|cloud.?engineer|security|mobile|embedded)\\b/i;\nconst negativeSenior = /\\b(senior|sr\\.?)\\b/i;\n// ============================================================\n\nlet filtered = 0;\nlet duped = 0;\nlet added = 0;\n\nfor (let i = 0; i < links.length; i++) {\n  const url = links[i] || '';\n  const title = (titles[i] || '').trim();\n  const company = (companies[i] || '').trim();\n  const location = (locations[i] || '').trim();\n\n  // Extract job ID\n  const match = url.match(/-(\\d{8,})(?:\\?|$)/);\n  const jobId = match ? match[1] : null;\n  if (!jobId) continue;\n\n  // Dedup within this run only (no sheet dedup)\n  const alreadyFound = foundLinks.some(l => l.jobId === jobId);\n  if (alreadyFound) { duped++; continue; }\n\n  // Apply negative title filter\n  if (negativeBase.test(title)) { filtered++; continue; }\n\n  // For Bucket 1 & 2, also exclude 'senior'\n  if ((currentBucket === '1' || currentBucket === '2') && negativeSenior.test(title)) {\n    filtered++; continue;\n  }\n\n  foundLinks.push({\n    url: `https://www.linkedin.com/jobs/view/${jobId}`,\n    jobId: jobId,\n    bucket: currentBucket,\n    searchTitle: title,\n    searchCompany: company,\n    searchLocation: location\n  });\n  added++;\n}\n\nstaticData.foundJobLinks = foundLinks;\n\nconsole.log(`Bucket ${currentBucket}: ${links.length} total, ${added} new, ${duped} dupes, ${filtered} filtered`);\n\nreturn [{json: {processed: true, bucket: currentBucket, total: links.length, added: added, duped: duped, filtered: filtered}}];"
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst foundLinks = staticData.foundJobLinks || [];\n\nconst currentBucket = $('Loop Over URLs').first().json.bucket || '0';\n\nconst data = $input.first().json;\nconst links = data.links || [];\nconst titles = data.titles || [];\nconst companies = data.companies || [];\nconst locations = data.locations || [];\n\n// ============================================================\n// NEGATIVE TITLE FILTER (same as main workflow)\n// ============================================================\nconst negativeBase = /\\b(staff|principal|lead|manager|director|ios|android|machine.?learning|data.?scien|QA|SDET|devops|SRE|site.?reliability|frontend|front.?end|intern|test.?engineer|test.?auto|platform.?engineer|infra.?engineer|cloud.?engineer|security|mobile|embedded)\\b/i;\nconst negativeSenior = /\\b(senior|sr\\.?)\\b/i;\n// ============================================================\n\nlet filtered = 0;\nlet duped = 0;\nlet added = 0;\n\nfor (let i = 0; i < links.length; i++) {\n  const url = links[i] || '';\n  const title = (titles[i] || '').trim();\n  const company = (companies[i] || '').trim();\n  const location = (locations[i] || '').trim();\n\n  // Extract job ID\n  const match = url.match(/-(\\d{8,})(?:\\?|$)/);\n  const jobId = match ? match[1] : null;\n  if (!jobId) continue;\n\n  // Dedup within this run only (no sheet dedup)\n  const alreadyFound = foundLinks.some(l => l.jobId === jobId);\n  if (alreadyFound) { duped++; continue; }\n\n  // Apply negative title filter\n  if (negativeBase.test(title)) { filtered++; continue; }\n\n  // For Bucket 1 & 2, also exclude 'senior'\n  if ((currentBucket === '1' || currentBucket === '2') && negativeSenior.test(title)) {\n    filtered++; continue;\n  }\n\n  foundLinks.push({\n    url: `https://www.linkedin.com/jobs/view/${jobId}`,\n    jobId: jobId,\n    bucket: currentBucket,\n    searchTitle: title,\n    searchCompany: company,\n    searchLocation: location\n  });\n  added++;\n}\n\nstaticData.foundJobLinks = foundLinks;\n\n// ---- Paging ----------------------------------------------------------------------------------\n// LinkedIn's guest search endpoint returns at most PAGE_SIZE cards per request, so keep asking for the\n// next page while a page comes back full, up to MAX_PAGES per bucket. A short (or empty) page is the last.\n// Paging state lives in static data; the URL-building node resets it at the start of every run.\nconst PAGE_SIZE = 10;\nconst MAX_PAGES = 30;\nconst pagesDone = (staticData.searchPages || 0) + 1;\nconst nextStart = (staticData.searchStart || 0) + links.length;\nconst hasMore = links.length >= PAGE_SIZE && pagesDone < MAX_PAGES;\nif (links.length >= PAGE_SIZE && pagesDone >= MAX_PAGES) {\n  console.log(`WARNING: bucket ${currentBucket} reached the ${MAX_PAGES}-page cap (${nextStart} results read); older results were not fetched. Use a shorter time window.`);\n}\nstaticData.searchStart = hasMore ? nextStart : 0;\nstaticData.searchPages = hasMore ? pagesDone : 0;\n\nconsole.log(`Bucket ${currentBucket} page ${pagesDone}: ${links.length} cards, ${added} new, ${duped} dupes, ${filtered} filtered${hasMore ? ' -> fetching next page' : ''}`);\n\nreturn [{json: {processed: true, bucket: currentBucket, total: links.length, added: added, duped: duped, filtered: filtered, hasMore: hasMore, nextStart: nextStart, page: pagesDone}}];"
       }
     },
     {
@@ -722,6 +726,52 @@
         -70,
         200
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-has-more",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ $json.hasMore }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "More Pages?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2008,
+        0
+      ],
+      "id": "7a49080e-93cb-4ee8-b11c-c462774363d7"
+    },
+    {
+      "id": "f72bf15a-aacd-468d-8df9-651ea3db3255",
+      "name": "Next Page URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2008,
+        208
+      ],
+      "parameters": {
+        "jsCode": "// Request for the next page of the current bucket's search: same URL, `start` = number of results already read.\nconst base = $('Loop Over URLs').first().json;\nconst nextStart = $input.first().json.nextStart;\n\nreturn [{json: {url: base.url + '&start=' + nextStart, bucket: base.bucket, companyCount: base.companyCount}}];"
+      }
     }
   ],
   "connections": {
@@ -853,7 +903,7 @@
       "main": [
         [
           {
-            "node": "Loop Over URLs",
+            "node": "More Pages?",
             "type": "main",
             "index": 0
           }
@@ -1067,6 +1117,35 @@
         [
           {
             "node": "Lookup Company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "More Pages?": {
+      "main": [
+        [
+          {
+            "node": "Next Page URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next Page URL": {
+      "main": [
+        [
+          {
+            "node": "Wait Between Searches",
             "type": "main",
             "index": 0
           }

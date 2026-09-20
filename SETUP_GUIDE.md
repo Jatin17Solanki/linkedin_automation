@@ -84,7 +84,12 @@ VM public IP:                     (cloud)
 
 **Why two?** Telegram delivers a bot's incoming messages to exactly one place, and each of these workflows needs to receive its own commands. Two workflows that both listen for commands therefore need two bots. The scheduled digests (the core of the project) need only **one bot**, so you *can* start with Bot #1 and add Bot #2 later — but Company Search is worth having, so we recommend creating both now while you're talking to BotFather.
 
-<!-- SCREENSHOT SLOT: docs/images/two-bots.png — side-by-side of the two bot chats -->
+<p align="center">
+  <img src="docs/images/job_bot.jpeg" width="260" alt="Bot #1 (Job Alert): the scheduled digest and /jobs">
+  <img src="docs/images/search_bot.jpeg" width="260" alt="Bot #2 (Company Alert): /search">
+</p>
+
+*What you end up with: Bot #1 (left) sends the digest and takes `/jobs`; Bot #2 (right) takes `/search`.*
 
 ### Create a bot
 
@@ -185,7 +190,7 @@ Prefer to type it yourself? Skip this step: the script fills the Resume tab with
 
 | Tab | What's in it | You'll edit it? |
 |-----|--------------|-----------------|
-| **Config** | ~50 example companies with their LinkedIn IDs and search bucket | Yes — see [5.1](#51-companies-and-buckets) |
+| **Config** | 94 example companies with their LinkedIn IDs and search bucket | Yes — see [5.1](#51-companies-and-buckets) |
 | **Settings** | Location, experience range, minimum match %, notify email (working defaults) | Yes, any time — see [Part 5](#part-5-customizing) |
 | **Resume** | Your profile, from Step 1 (or placeholders) | Yes, if you skipped Step 1 |
 | **Results** | Headers only. The workflow fills this with every job it finds and remembers what it already sent you | No |
@@ -208,7 +213,7 @@ n8n needs permission to read and write your Sheet. Self-hosted n8n has no built-
    - **Google Drive API** — n8n uses it to list your spreadsheets in its picker. Skipping it causes a "Drive API not enabled" 403 the first time you open a Sheets node.
    - **Gmail API** — *only if you'll use Company Search's email digest.*
 3. **APIs & Services → OAuth consent screen** (may be called *Google Auth Platform* now) → user type **External** → give it an app name and your email → save. Under **Test users**, add **your own Google account**.
-4. **Publish the app.** New apps start in *Testing* mode, and Google **expires the sign-in of a Testing app after 7 days** — your automation would silently lose access to the Sheet a week after you set it up. On the consent screen / Audience page choose **Publish app** (*In production*). For personal use you do **not** need Google's verification; you'll simply keep seeing the "unverified app" warning when you sign in, which is fine. ([Google's explanation](https://support.google.com/cloud/answer/15549945).)
+4. **Publish the app.** New apps start in *Testing* mode, and Google **expires the sign-in of a Testing app after 7 days** — your automation would silently lose access to the Sheet a week after you set it up. To do it: **APIs & Services → OAuth consent screen** (newer consoles call this *Google Auth Platform*) → **Audience** → under *Publishing status: Testing* click **Publish app** and confirm. The status changes to *In production*. **If you already signed in to n8n while the app was in Testing, click *Sign in with Google* again on the n8n credential** (see [3.2](#32-create-the-google-sheets-credential)) so it gets a long-lived sign-in. For personal use you do **not** need Google's verification; you'll simply keep seeing the "unverified app" warning when you sign in, which is fine. ([Google's explanation](https://support.google.com/cloud/answer/15549945).)
 5. **APIs & Services → Credentials → Create Credentials → OAuth client ID** → application type **Web application**. Under **Authorized redirect URIs** add the address n8n will use:
    - **Local:** `http://localhost:5678/rest/oauth2-credential/callback`
    - **Cloud:** `https://<YOUR_VM_IP>.nip.io/rest/oauth2-credential/callback` — you won't know the IP until you've created the VM in Part 2. Either allocate the VM's IP first, or create the client now with the `localhost` address and **edit it to add the cloud address later** (Google lets you change redirect URIs any time; n8n also shows you the exact address to use in [Part 3](#part-3-connect-n8n-to-your-accounts)). New URIs can take a few minutes to take effect.
@@ -442,7 +447,7 @@ Now repeat for the other Google Sheets nodes. Each has a *Document* (always your
 
 There's no bulk option — n8n stores the document per node, so it's seven quick repeats. **Choosing a Document blanks that node's Sheet field**, so always re-check the Sheet after.
 
-Then the Telegram nodes: **Send Telegram**, **Send No Results Telegram** and **Telegram Trigger** → **Credential to connect with** → your Bot #1 credential. (No document/sheet here.) *Telegram Trigger* is shipped disabled — leave it that way locally; see 3.5.
+Then the Telegram nodes: **Send Telegram**, **Send No Results Telegram**, **Send Usage Telegram** and **Telegram Trigger** → **Credential to connect with** → your Bot #1 credential. (No document/sheet here.) *Telegram Trigger* is shipped disabled — leave it that way locally; see 3.5.
 
 > If you ever re-import a workflow file, the document selections reset to the placeholder — see [Troubleshooting](TROUBLESHOOTING.md).
 
@@ -469,7 +474,7 @@ Because the window is only 24 hours, a first run can easily return **zero jobs**
 
 **Locally:** open the workflow and click **Test workflow** (top right); nodes light up green as they run. Or call the webhook: `http://localhost:5678/webhook/job-search?hours=24` (the workflow must be Active for the webhook URL to work).
 
-**On a VM:** message Bot #1 on Telegram: `/jobs 24` (the number is **hours** — search the last 24 hours; plain `/jobs` means 12 hours; digits only, so `/jobs 24h` won't work). You'll get job listings, or "no new openings found this run" — either means it's working.
+**On a VM:** message Bot #1 on Telegram: `/jobs 24` (the number is **hours** — search the last 24 hours; plain `/jobs` means 12 hours; digits only, so `/jobs 24h` won't work). Anything that isn't `/jobs` or `/jobs <hours>` — including the `/start` you send when saying hello — gets a short usage reply and does **not** start a search. You'll get job listings, or "no new openings found this run" — either means it's working.
 
 **To guarantee some results while testing:** open **Build Search URLs**, find `const TIME_WINDOW_SECONDS = staticDataForTime.customTimeWindow || 86400;` and temporarily change `86400` to `2592000` (30 days). **Change it back afterwards** — otherwise every scheduled run keeps using 30 days. (`/jobs N` and the webhook's `?hours=N` set the window for that one run without editing anything.)
 
@@ -573,7 +578,7 @@ Companies name the same level differently, and one search phrase can't fit them 
 
 | Bucket | Searches for titles like… | Excludes "senior"? | Why | Example companies |
 |:---:|---|:---:|---|---|
-| **1** | "SDE II", "SDE 2", "Software Engineer II" | **Yes** | These companies call mid-level *SDE II*; "Senior" is the *next* level up, which you don't want | Amazon, Flipkart, Expedia, Microsoft, Intuit |
+| **1** | "SDE II", "SDE 2", "Software Engineer II" | **Yes** | These companies call mid-level *SDE II*; "Senior" is the *next* level up, which you don't want | Amazon, Flipkart, Expedia, Microsoft, Groww |
 | **2** | "Software Engineer III", "Level 3" | **Yes** | Same idea, with a numeric level system | Oracle, Google, Walmart, eBay |
 | **3** | Generic: "software engineer", "backend engineer", "MTS", … plus "Senior Member, Tech" | **No** | Some large companies use **"Senior"** for what is really a mid-level role (Myntra, PayPal, MakeMyTrip), so excluding it would silently drop real matches | Adobe, Salesforce, Myntra, PayPal, Apple, Meta, Uber |
 | **4** | Generic: "software engineer", "backend engineer", "MTS", … | **No** | The catch-all for everyone else | Atlassian, Nvidia, Swiggy, Cred, Kotak, … |
@@ -691,6 +696,8 @@ The times are read in the timezone set by `GENERIC_TIMEZONE` (and `TZ`) in the c
 
 To change the *default* 24 hours, edit `86400` (seconds) in **Build Search URLs** — `const TIME_WINDOW_SECONDS = staticDataForTime.customTimeWindow || 86400;` — e.g. `43200` = 12 h. (Company Search is different: it takes **days**, e.g. `/search Oracle 30`.)
 
+**Long windows and paging.** LinkedIn returns results 10 at a time, so each search reads page after page until it runs out — up to **30 pages (300 results) per company group** per run, with the wait between requests you already have. If a window is so wide that the cap is hit, the run's log says `WARNING: bucket N reached the 30-page cap` and older results are skipped: shorten the window (or, for Company Search, use fewer days).
+
 ## 5.6 Environment variable reference
 
 Two kinds of value exist, and it helps to keep them apart.
@@ -769,20 +776,37 @@ To check what's actually set: `sudo docker compose exec n8n printenv | grep -E "
    | `N8N_API_KEY` | The key from step 1 |
 5. **Test:** push an edit to a workflow JSON, then run the action from the Actions tab.
 
-Importing replaces a workflow's definition on your instance, so afterwards re-check that the credentials and Google Sheet are still selected on each node ([3.4](#34-worked-example-connect-one-node)).
+The import keeps the credentials, spreadsheet selections and enabled/disabled state you set on nodes that already exist (see [6.2](#62-updating-an-existing-instance)); check the workflow afterwards anyway, especially any node the release added.
 
 ## 6.2 Updating an existing instance
 
-The Docker image copies the three workflows into n8n **only the first time a container starts**. So pulling a newer image or a newer copy of the repo updates n8n itself but **not** the workflows already stored in your instance — you keep whichever version was imported first. If a fix you read about in the repo doesn't seem to apply on your VM, this is why. Your options, gentlest first:
+The Docker image copies the three workflows into n8n **only the first time a container starts**. So pulling a newer image or a newer copy of the repo updates n8n itself but **not** the workflows already stored in your instance — you keep whichever version was imported first. If a fix you read about in the repo doesn't seem to apply on your VM, this is why.
 
-1. **Paste the change into the one node.** If the fix is a Code node's JavaScript, copy the new code into that node in the n8n editor. Nothing else is touched, no credentials reset.
-2. **Delete and re-import the workflow.** ⋯ → **Import from URL** / **Import from File** with the current `n8n_*.json`. Cleanest, but **all credential and spreadsheet selections reset** — redo [3.4](#34-worked-example-connect-one-node).
-3. **`deploy/import-workflow.sh`** (what the optional CI/CD in 6.1 runs) updates a workflow in place through the API. The same reset applies.
+### Recommended: the update script (keeps your credentials and spreadsheet)
+
+`deploy/import-workflow.sh` updates a workflow in place through n8n's API **and carries over what you set up**: for every node that already exists, it keeps the credentials you attached, the spreadsheet and tab you picked on Google Sheets nodes, whether the node is enabled (your Telegram Trigger stays on) and its webhook id. A node that is *new* in the release and needs a credential (for example a new Telegram node) reuses the one you already have. Everything else — code, settings, wiring — comes from the new version.
+
+1. In n8n: **Settings → API → Create an API key** and copy it.
+2. On the VM (or anywhere with `git`, `curl` and `python3`):
+   ```bash
+   cd ~/linkedin_automation && git pull
+   for f in n8n_job_search_v1.json n8n_company_search_v1.json n8n_job_parser_v1.json; do
+     bash deploy/import-workflow.sh "$f" "https://<YOUR_VM_IP>.nip.io" "<YOUR_N8N_API_KEY>"
+   done
+   ```
+   Add `DRY_RUN=true` in front of the command to write the merged result to `merged-preview.json` and change nothing on the instance. `PRESERVE_WIRING=false` imports the file exactly as shipped instead.
+3. Open each workflow in n8n and check the Active toggle. If a workflow could not be activated (the script prints a `NOTE`), attach the missing credential and switch it on.
+
+> This has been tested against a mock of n8n's API, not yet against a live instance — so keep the fallback below in mind, and glance at each workflow after the first update.
+
+### Other options
+
+1. **Paste the change into the one node.** If the fix is a Code node's JavaScript, copy the new code into that node in the n8n editor. Nothing else is touched.
+2. **Delete and re-import the workflow** (⋯ → **Import from URL** / **Import from File**). Cleanest, but **all credential and spreadsheet selections reset** — redo [3.4](#34-worked-example-connect-one-node).
 
 Updating n8n's own image: `cd /opt/n8n && sudo docker compose pull n8n && sudo docker compose up -d`.
 
 **Changes to the Docker Compose file** (for example the telemetry-off settings added later) also don't reach a VM you set up earlier, because the setup script copies `deploy/docker-compose.prod.yml` to `/opt/n8n/docker-compose.yml` once. To pick them up: `cd ~/linkedin_automation && git pull && sudo cp deploy/docker-compose.prod.yml /opt/n8n/docker-compose.yml && cd /opt/n8n && sudo docker compose up -d`. Your `.env` (keys, passwords) and your data volumes are untouched.
-
 ## 6.3 Costs
 
 ### AWS

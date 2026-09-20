@@ -1,51 +1,95 @@
 Company,CompanyID,Bucket,Active,Notes
-Amazon,1586,1,TRUE,SDE II / SDE 2
-Flipkart,321062,1,TRUE,SDE II
-Expedia,2751,1,TRUE,SDE II
-Zeta,10355561,1,TRUE,SDE II
-InMobi,272972,1,TRUE,SDE II
-Slice,30246063,1,TRUE,SDE 2 Backend
-Groww,10813156,1,TRUE,SDE 2
-Akamai,3925,1,TRUE,SE II
-Wayfair,19857,1,TRUE,SE II
-Rippling,17988315,1,TRUE,SE II
-Intuit,1666,1,TRUE,SE 2
-Microsoft,1035,1,TRUE,SE II
-Oracle,1028,2,TRUE,SE III / Developer 3
-Google,1441,2,TRUE,SE III
-Walmart Global Tech India,9390173,2,TRUE,SE III
-eBay,1481,2,TRUE,SE 3
-Adobe,1480,3,TRUE,MTS / SDE-II
-Salesforce,3185,3,TRUE,MTS
-Myntra,361348,3,TRUE,Senior = mid-level
-PayPal,1482,3,TRUE,Senior = mid-level / Backend
-MakemyTrip,35113,3,TRUE,Senior SE I/II
-PhonePe,10479149,3,TRUE,SE Backend
-Apple,162479,3,TRUE,Generic search
-Meta,10667,3,TRUE,Generic search
-LinkedIn,1337,3,TRUE,Generic search
-Netflix,165158,3,TRUE,Generic search
-Uber,1815218,3,TRUE,Generic search
-Databricks,3477522,3,TRUE,Generic search
-Atlassian,22688,4,TRUE,Generic search
-Nvidia,3608,4,TRUE,Generic search
-Airbnb,309694,4,TRUE,Generic search
-Confluent,88873,4,TRUE,Generic search
-ServiceNow,29352,4,TRUE,Generic search
-Workday,17719,4,TRUE,Generic search
-Rubrik,4840301,4,TRUE,Generic search
-Slack,1612748,4,TRUE,Generic search
-Nutanix,735085,4,TRUE,Generic search
-OpenTable,12181,4,TRUE,Generic search
-Observe.ai,18090845,4,TRUE,Generic search
 Acko,13250135,4,TRUE,Generic search
-Upstox,15091079,4,TRUE,Generic search
-Cred,14485479,4,TRUE,Generic search
-SuperMoney,13244834,4,TRUE,Generic search
-ClearTax,74474022,4,TRUE,Generic search
+Adobe,1480,3,TRUE,MTS / SDE-II
+Agoda,66719,4,TRUE,Generic search
+Airbnb,309694,4,TRUE,Generic search
+Akamai,3925,1,TRUE,SE II
+Amazon,1586,1,TRUE,SDE II / SDE 2
+American Express,1277,4,TRUE,Generic search
+Apple,162479,3,TRUE,Generic search
+AQR Capital,20749,4,TRUE,Generic search
+Atlassian,22688,4,TRUE,Generic search
+AutoDesk,1879,4,TRUE,Generic search
+Barclays,1426,4,TRUE,Generic search
+BlackRock,4764,4,TRUE,Generic search
 Blinkit,80918929,4,TRUE,Generic search
-Directi,29570,4,TRUE,Generic search
-DeShaw,6508,4,TRUE,Generic search
-Kotak Mahindra Bank,5632,4,TRUE,Generic search
+Bloomberg,2494,4,TRUE,Generic search
+Booking Holdings,10198247,4,TRUE,Generic search
+Booking.com,11348,4,TRUE,Generic search
+Broadcom,2643,4,TRUE,Generic search
+Cisco,1063,4,TRUE,Generic search
+ClearTax,74474022,4,TRUE,Generic search
 ClearTrip,62902,4,TRUE,Generic search
+Cloudera,229433,4,TRUE,Generic search
+Cloudflare,407222,4,TRUE,Generic search
+Coinbase,2857634,4,TRUE,Generic search
+Confluent,88873,4,TRUE,Generic search
+Cred,14485479,4,TRUE,Generic search
+Databricks,3477522,3,TRUE,Generic search
+DeShaw,2408262,4,TRUE,Generic search
+Directi,29570,4,TRUE,Generic search
+Docusign,19022,4,TRUE,Generic search
+DoorDash,3205573,4,TRUE,Generic search
+eBay,1481,2,TRUE,SE 3
+Expedia,2751,1,TRUE,SDE II
+FareHarbor,2957445,4,TRUE,Generic search
+Flipkart,321062,1,TRUE,SDE II
+Gitlab,5101804,4,TRUE,Generic search
+Goldman Sachs,1382,4,TRUE,Generic search
+Google,1441,2,TRUE,SE III
+Groww,10813156,1,TRUE,SDE 2
+HackerRank,435210,4,TRUE,Generic search
+Hotstar (Disney+),5895894,4,TRUE,Generic search
+Hudson River Trading,730004,4,TRUE,Generic search
+IMC Trading,200030,4,TRUE,Generic search
+InMobi,272972,4,TRUE,SDE II
+Intuit,1666,4,TRUE,SE 2
+JioHotstar,105490663,4,TRUE,Generic search
+JPMC,1068,4,TRUE,Generic search
+KAYAK,32889,4,TRUE,Generic search
+Kotak Mahindra Bank,5632,4,TRUE,Generic search
+LinkedIn,1337,3,TRUE,Generic search
+MakemyTrip,35113,3,TRUE,Senior SE I/II
+Media.net,862672,4,TRUE,Generic search
+Meesho,10037698,4,TRUE,Generic search
+Mercor,71301545,4,TRUE,Generic search
+Meta,10667,3,TRUE,Generic search
+Microsoft,1035,1,TRUE,SE II
+Morgan Stanley,162864,4,TRUE,Generic search
+Myntra,361348,3,TRUE,Senior = mid-level
+Netflix,165158,3,TRUE,Generic search
+Nielsen,1714,4,TRUE,Generic search
+Nutanix,735085,4,TRUE,Generic search
+Nvidia,3608,4,TRUE,Generic search
+Nykaa,3545422,4,TRUE,Generic search
+Observe.ai,18090845,4,TRUE,Generic search
+OpenTable,12181,4,TRUE,Generic search
+Oracle,1028,2,TRUE,SE III / Developer 3
+PayPal,1482,3,TRUE,Senior = mid-level / Backend
+PhonePe,10479149,3,TRUE,SE Backend
+Postman,3795851,4,TRUE,Generic search
+Priceline,7451,4,TRUE,Generic search
+Razorpay,2770855,4,TRUE,Generic search
+Red Hat,3545,4,TRUE,Generic search
+Rippling,17988315,1,TRUE,SE II
+Rubrik,4840301,4,TRUE,Generic search
+Salesforce,3185,3,TRUE,MTS
+ServiceNow,29352,4,TRUE,Generic search
+Slack,1612748,4,TRUE,Generic search
+Slice,30246063,1,TRUE,SDE 2 Backend
+Splunk,20226,4,TRUE,Generic search
+Stripe,2135371,4,TRUE,Generic search
+SuperMoney,13244834,4,TRUE,Generic search
 Swiggy,9252341,4,TRUE,Generic search
+Target,1512,4,TRUE,Generic search
+Toast,5102948,4,TRUE,Generic search
+Uber,1815218,3,TRUE,Generic search
+Upstox,15091079,4,TRUE,Generic search
+Visa,2190,4,TRUE,Generic search
+Walmart Global Tech India,9390173,2,TRUE,SE III
+Wayfair,19857,1,TRUE,SE II
+Workday,17719,4,TRUE,Generic search
+Zerodha,2160857,4,TRUE,Generic search
+Zeta,10355561,1,TRUE,SDE II
+Coupang,2824374,4,TRUE,Generic search
+DP World,163494,4,TRUE,

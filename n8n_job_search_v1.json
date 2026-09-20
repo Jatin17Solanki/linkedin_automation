@@ -114,7 +114,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst msg = ($input.first().json.message?.text || '').trim();\n\n// Parse commands like: /jobs 6, /jobs 12, /jobs\nconst match = msg.match(/^\\/jobs(?:\\s+(\\d+))?$/);\n\nif (!match) {\n  // Not a valid command — ignore\n  staticData.telegramTriggered = false;\n  return [{json: {skip: true, reason: 'Invalid command. Use /jobs or /jobs <hours>'}}];\n}\n\nconst hours = match[1] ? parseInt(match[1]) : 12; // Default 12 hours if no number given\nconst seconds = hours * 3600;\n\nstaticData.telegramTriggered = true;\nstaticData.customTimeWindow = seconds;\nstaticData.triggerChatId = $input.first().json.message?.chat?.id || $env.TELEGRAM_CHAT_ID || '';\n\nconsole.log(`Telegram trigger: searching last ${hours} hours (${seconds}s)`);\n\nreturn [{json: {hours: hours, seconds: seconds, triggered: true}}];"
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst msg = ($input.first().json.message?.text || '').trim();\n\n// Parse commands like: /jobs 6, /jobs 12, /jobs\nconst match = msg.match(/^\\/jobs(?:@\\w+)?(?:\\s+(\\d+))?$/i);   // case-insensitive; also accepts the /jobs@BotName form Telegram uses in groups\n\nif (!match) {\n  // Not a valid command — ignore\n  staticData.telegramTriggered = false;\n  return [{json: {skip: true, reason: 'Invalid command. Use /jobs or /jobs <hours>', chatId: $input.first().json.message?.chat?.id || ''}}];\n}\n\nconst hours = match[1] ? parseInt(match[1]) : 12; // Default 12 hours if no number given\nconst seconds = hours * 3600;\n\nstaticData.telegramTriggered = true;\nstaticData.customTimeWindow = seconds;\nstaticData.triggerChatId = $input.first().json.message?.chat?.id || $env.TELEGRAM_CHAT_ID || '';\n\nconsole.log(`Telegram trigger: searching last ${hours} hours (${seconds}s)`);\n\nreturn [{json: {hours: hours, seconds: seconds, triggered: true}}];"
       },
       "id": "e701b1f2-a5c8-487a-9f6d-400ac5d89b31",
       "name": "Parse Hours",
@@ -205,7 +205,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// SETTINGS — Change these before manual runs if needed\n// ============================================================\nconst staticDataForTime = $getWorkflowStaticData('global');\nconst TIME_WINDOW_SECONDS = staticDataForTime.customTimeWindow || 86400;  // Default 24h, overridden by Telegram /jobs command\n// Clear custom time after reading so scheduled runs use default\ndelete staticDataForTime.customTimeWindow;\nconst LOCATION = 'India';           // Search location\n// Settings tab (Read Settings/Store Settings, above) > env var > hardcoded default\nconst settings = staticDataForTime.settings || {};\nconst GEO_ID = (settings.location_geo_id || '').trim() || $env.LOCATION_GEO_ID || '102713980';         // broad geoId (India by default); see LOCATION_GEO_ID / Settings tab\nconst LOCATION_FILTER = (settings.location_f_pp || '').trim() || $env.LOCATION_F_PP || '105214831'; // f_PP place ID(s) -- comma-separated for multi-city, e.g. \"105214831,90009551\" for Bengaluru + Mumbai; see LOCATION_F_PP / Settings tab\n// ============================================================\n\nconst staticData = $getWorkflowStaticData('global');\nconst config = staticData.config || [];\nconst results = $input.all().map(i => i.json);\n\n// Build dedup set from existing results\nconst existingJobIds = {};\nfor (const r of results) {\n  if (r.JobID) existingJobIds[String(r.JobID)] = true;\n}\nstaticData.existingJobIds = existingJobIds;\nstaticData.newJobLinks = [];\n\nconsole.log(`Dedup set loaded: ${Object.keys(existingJobIds).length} existing job IDs`);\n\n// Define keyword templates per bucket\nconst bucketKeywords = {\n  '1': '\"software development engineer\" OR \"SDE\" OR \"SDE II\" OR \"SDE 2\" OR \"SDE-II\" OR \"software engineer II\" OR \"software engineer 2\" OR \"software engineer - II\"',\n  '2': '\"software engineer III\" OR \"software engineer 3\" OR \"software developer 3\"',\n  '3': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\" OR \"Senior Member, Tech\"',\n  '4': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\" '\n};\n\n// Group active companies by bucket\nconst buckets = {};\nfor (const item of config) {\n  const isActive = String(item.Active).toUpperCase() === 'TRUE' || item.Active === true;\n  if (!isActive) continue;\n  \n  const bucket = String(item.Bucket);\n  if (!buckets[bucket]) buckets[bucket] = [];\n  buckets[bucket].push(String(item.CompanyID));\n}\n\n// Build LinkedIn search URLs\nconst urls = [];\nfor (const [bucket, companyIds] of Object.entries(buckets)) {\n  const keywords = bucketKeywords[bucket];\n  if (!keywords || companyIds.length === 0) continue;\n  \n  const encodedKeywords = encodeURIComponent(keywords);\n  const companyFilter = companyIds.join(',');\n  const encodedLocation = encodeURIComponent(LOCATION);\n  \n  const url = `https://www.linkedin.com/jobs/search/?keywords=${encodedKeywords}&f_C=${companyFilter}&f_TPR=r${TIME_WINDOW_SECONDS}&location=${encodedLocation}&geoId=${GEO_ID}&f_PP=${LOCATION_FILTER}&sortBy=DD`;\n  \n  urls.push({\n    url: url,\n    bucket: bucket,\n    companyCount: companyIds.length\n  });\n}\n\nconsole.log(`Built ${urls.length} search URLs for ${Object.keys(buckets).length} active buckets`);\n\nif (urls.length === 0) {\n  return [{json: {url: '', bucket: '0', companyCount: 0, noUrls: true}}];\n}\n\nreturn urls.map(u => ({json: u}));"
+        "jsCode": "// ============================================================\n// SETTINGS — Change these before manual runs if needed\n// ============================================================\nconst staticDataForTime = $getWorkflowStaticData('global');\nconst TIME_WINDOW_SECONDS = staticDataForTime.customTimeWindow || 86400;  // Default 24h, overridden by Telegram /jobs command\n// Clear custom time after reading so scheduled runs use default\ndelete staticDataForTime.customTimeWindow;\nconst LOCATION = 'India';           // Search location\n// Settings tab (Read Settings/Store Settings, above) > env var > hardcoded default\nconst settings = staticDataForTime.settings || {};\nconst GEO_ID = (settings.location_geo_id || '').trim() || $env.LOCATION_GEO_ID || '102713980';         // broad geoId (India by default); see LOCATION_GEO_ID / Settings tab\nconst LOCATION_FILTER = (settings.location_f_pp || '').trim() || $env.LOCATION_F_PP || '105214831'; // f_PP place ID(s) -- comma-separated for multi-city, e.g. \"105214831,90009551\" for Bengaluru + Mumbai; see LOCATION_F_PP / Settings tab\n// ============================================================\n\nconst staticData = $getWorkflowStaticData('global');\nconst config = staticData.config || [];\nconst results = $input.all().map(i => i.json);\n\n// Build dedup set from existing results\nconst existingJobIds = {};\nfor (const r of results) {\n  if (r.JobID) existingJobIds[String(r.JobID)] = true;\n}\nstaticData.existingJobIds = existingJobIds;\nstaticData.newJobLinks = [];\nstaticData.searchStart = 0;\nstaticData.searchPages = 0;\n\nconsole.log(`Dedup set loaded: ${Object.keys(existingJobIds).length} existing job IDs`);\n\n// Define keyword templates per bucket\nconst bucketKeywords = {\n  '1': '\"software development engineer\" OR \"SDE\" OR \"SDE II\" OR \"SDE 2\" OR \"SDE-II\" OR \"software engineer II\" OR \"software engineer 2\" OR \"software engineer - II\"',\n  '2': '\"software engineer III\" OR \"software engineer 3\" OR \"software developer 3\"',\n  '3': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\" OR \"Senior Member, Tech\"',\n  '4': '\"software engineer\" OR \"software developer\" OR \"backend engineer\" OR \"SDE\" OR \"MTS\" OR \"member of technical staff\" '\n};\n\n// Group active companies by bucket\nconst buckets = {};\nfor (const item of config) {\n  const isActive = String(item.Active).toUpperCase() === 'TRUE' || item.Active === true;\n  if (!isActive) continue;\n  \n  const bucket = String(item.Bucket);\n  if (!buckets[bucket]) buckets[bucket] = [];\n  buckets[bucket].push(String(item.CompanyID));\n}\n\n// Build LinkedIn search URLs\nconst urls = [];\nfor (const [bucket, companyIds] of Object.entries(buckets)) {\n  const keywords = bucketKeywords[bucket];\n  if (!keywords || companyIds.length === 0) continue;\n  \n  const encodedKeywords = encodeURIComponent(keywords);\n  const companyFilter = companyIds.join(',');\n  const encodedLocation = encodeURIComponent(LOCATION);\n  \n  const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodedKeywords}&f_C=${companyFilter}&f_TPR=r${TIME_WINDOW_SECONDS}&location=${encodedLocation}&geoId=${GEO_ID}&f_PP=${LOCATION_FILTER}&sortBy=DD`;\n  \n  urls.push({\n    url: url,\n    bucket: bucket,\n    companyCount: companyIds.length\n  });\n}\n\nconsole.log(`Built ${urls.length} search URLs for ${Object.keys(buckets).length} active buckets`);\n\nif (urls.length === 0) {\n  return [{json: {url: '', bucket: '0', companyCount: 0, noUrls: true}}];\n}\n\nreturn urls.map(u => ({json: u}));"
       },
       "id": "f365e0eb-e208-49ea-b606-5ad6f332f5aa",
       "name": "Build Search URLs",
@@ -258,7 +258,10 @@
         5024,
         3376
       ],
-      "continueOnFail": true
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -267,24 +270,24 @@
           "values": [
             {
               "key": "links",
-              "cssSelector": "ul.jobs-search__results-list li div a[class*='base-card']",
+              "cssSelector": "li div a[class*='base-card']",
               "returnValue": "attribute",
               "attribute": "href",
               "returnArray": true
             },
             {
               "key": "titles",
-              "cssSelector": "ul.jobs-search__results-list h3.base-search-card__title",
+              "cssSelector": "h3.base-search-card__title",
               "returnArray": true
             },
             {
               "key": "companies",
-              "cssSelector": "ul.jobs-search__results-list h4.base-search-card__subtitle",
+              "cssSelector": "h4.base-search-card__subtitle",
               "returnArray": true
             },
             {
               "key": "locations",
-              "cssSelector": "ul.jobs-search__results-list span.job-search-card__location",
+              "cssSelector": "span.job-search-card__location",
               "returnArray": true
             }
           ]
@@ -303,7 +306,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst existingIds = staticData.existingJobIds || {};\nconst newLinks = staticData.newJobLinks || [];\n\n// Get current bucket from the URL item that flowed through\nconst currentBucket = $('Loop Over URLs').first().json.bucket || '0';\n\n// Get extracted data\nconst data = $input.first().json;\nconst links = data.links || [];\nconst titles = data.titles || [];\nconst companies = data.companies || [];\nconst locations = data.locations || [];\n\n// ============================================================\n// NEGATIVE TITLE FILTER\n// Titles containing these patterns are EXCLUDED\n// ============================================================\n// For Bucket 1 & 2: also exclude 'senior' and 'sr'\nconst negativeBase = /\\b(staff|principal|lead|manager|director|ios|android|machine.?learning|data.?scien|QA|SDET|devops|SRE|site.?reliability|frontend|front.?end|intern|test.?engineer|test.?auto|platform.?engineer|infra.?engineer|cloud.?engineer|security|mobile|embedded)\\b/i;\nconst negativeSenior = /\\b(senior|sr\\.?)\\b/i;\n// ============================================================\n\nlet filtered = 0;\nlet duped = 0;\nlet added = 0;\n\nfor (let i = 0; i < links.length; i++) {\n  const url = links[i] || '';\n  const title = (titles[i] || '').trim();\n  const company = (companies[i] || '').trim();\n  const location = (locations[i] || '').trim();\n  \n  // Extract job ID from URL (last numeric segment before '?' in slug like /view/title-JOBID?...)\n  const match = url.match(/-(\\d{8,})(?:\\?|$)/);\n  const jobId = match ? match[1] : null;\n  \n  if (!jobId) continue;\n  \n  // Dedup: check existing results AND already-found links\n  if (existingIds[jobId]) { duped++; continue; }\n  const alreadyFound = newLinks.some(l => l.jobId === jobId);\n  if (alreadyFound) { duped++; continue; }\n  \n  // Apply negative title filter\n  if (negativeBase.test(title)) { filtered++; continue; }\n  \n  // For Bucket 1 & 2, also exclude 'senior'\n  if ((currentBucket === '1' || currentBucket === '2') && negativeSenior.test(title)) {\n    filtered++; continue;\n  }\n  \n  // Passed all filters! Add to accumulator\n  newLinks.push({\n    url: `https://www.linkedin.com/jobs/view/${jobId}`,\n    jobId: jobId,\n    bucket: currentBucket,\n    searchTitle: title,\n    searchCompany: company,\n    searchLocation: location\n  });\n  added++;\n}\n\nstaticData.newJobLinks = newLinks;\n\nconsole.log(`Bucket ${currentBucket}: ${links.length} total, ${added} new, ${duped} dupes, ${filtered} filtered`);\n\nreturn [{json: {processed: true, bucket: currentBucket, total: links.length, new: added, duped: duped, filtered: filtered}}];"
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst existingIds = staticData.existingJobIds || {};\nconst newLinks = staticData.newJobLinks || [];\n\n// Get current bucket from the URL item that flowed through\nconst currentBucket = $('Loop Over URLs').first().json.bucket || '0';\n\n// Get extracted data\nconst data = $input.first().json;\nconst links = data.links || [];\nconst titles = data.titles || [];\nconst companies = data.companies || [];\nconst locations = data.locations || [];\n\n// ============================================================\n// NEGATIVE TITLE FILTER\n// Titles containing these patterns are EXCLUDED\n// ============================================================\n// For Bucket 1 & 2: also exclude 'senior' and 'sr'\nconst negativeBase = /\\b(staff|principal|lead|manager|director|ios|android|machine.?learning|data.?scien|QA|SDET|devops|SRE|site.?reliability|frontend|front.?end|intern|test.?engineer|test.?auto|platform.?engineer|infra.?engineer|cloud.?engineer|security|mobile|embedded)\\b/i;\nconst negativeSenior = /\\b(senior|sr\\.?)\\b/i;\n// ============================================================\n\nlet filtered = 0;\nlet duped = 0;\nlet added = 0;\n\nfor (let i = 0; i < links.length; i++) {\n  const url = links[i] || '';\n  const title = (titles[i] || '').trim();\n  const company = (companies[i] || '').trim();\n  const location = (locations[i] || '').trim();\n  \n  // Extract job ID from URL (last numeric segment before '?' in slug like /view/title-JOBID?...)\n  const match = url.match(/-(\\d{8,})(?:\\?|$)/);\n  const jobId = match ? match[1] : null;\n  \n  if (!jobId) continue;\n  \n  // Dedup: check existing results AND already-found links\n  if (existingIds[jobId]) { duped++; continue; }\n  const alreadyFound = newLinks.some(l => l.jobId === jobId);\n  if (alreadyFound) { duped++; continue; }\n  \n  // Apply negative title filter\n  if (negativeBase.test(title)) { filtered++; continue; }\n  \n  // For Bucket 1 & 2, also exclude 'senior'\n  if ((currentBucket === '1' || currentBucket === '2') && negativeSenior.test(title)) {\n    filtered++; continue;\n  }\n  \n  // Passed all filters! Add to accumulator\n  newLinks.push({\n    url: `https://www.linkedin.com/jobs/view/${jobId}`,\n    jobId: jobId,\n    bucket: currentBucket,\n    searchTitle: title,\n    searchCompany: company,\n    searchLocation: location\n  });\n  added++;\n}\n\nstaticData.newJobLinks = newLinks;\n\n// ---- Paging ----------------------------------------------------------------------------------\n// LinkedIn's guest search endpoint returns at most PAGE_SIZE cards per request, so keep asking for the\n// next page while a page comes back full, up to MAX_PAGES per bucket. A short (or empty) page is the last.\n// Paging state lives in static data; the URL-building node resets it at the start of every run.\nconst PAGE_SIZE = 10;\nconst MAX_PAGES = 30;\nconst pagesDone = (staticData.searchPages || 0) + 1;\nconst nextStart = (staticData.searchStart || 0) + links.length;\nconst hasMore = links.length >= PAGE_SIZE && pagesDone < MAX_PAGES;\nif (links.length >= PAGE_SIZE && pagesDone >= MAX_PAGES) {\n  console.log(`WARNING: bucket ${currentBucket} reached the ${MAX_PAGES}-page cap (${nextStart} results read); older results were not fetched. Use a shorter time window.`);\n}\nstaticData.searchStart = hasMore ? nextStart : 0;\nstaticData.searchPages = hasMore ? pagesDone : 0;\n\nconsole.log(`Bucket ${currentBucket} page ${pagesDone}: ${links.length} cards, ${added} new, ${duped} dupes, ${filtered} filtered${hasMore ? ' -> fetching next page' : ''}`);\n\nreturn [{json: {processed: true, bucket: currentBucket, total: links.length, new: added, duped: duped, filtered: filtered, hasMore: hasMore, nextStart: nextStart, page: pagesDone}}];"
       },
       "id": "652f0031-d02b-4127-84cf-fba4ba7cc621",
       "name": "Filter & Accumulate Links",
@@ -1160,6 +1163,108 @@
         3988,
         3468
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-has-more",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ $json.hasMore }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "More Pages?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5632,
+        3376
+      ],
+      "id": "52f4b06a-f650-4dba-b100-202f40f38490"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Request for the next page of the current bucket's search: same URL, `start` = number of results already read.\nconst base = $('Loop Over URLs').first().json;\nconst nextStart = $input.first().json.nextStart;\n\nreturn [{json: {url: base.url + '&start=' + nextStart, bucket: base.bucket, companyCount: base.companyCount}}];"
+      },
+      "id": "c5f63c8b-b6b0-4689-8f70-544ffe8ffbf2",
+      "name": "Next Page URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5632,
+        3584
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-jobs-command",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ $json.triggered === true }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "Is Jobs Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3536,
+        3568
+      ],
+      "id": "0c97c28c-b1f2-4e0f-8998-24d3b9adca34"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "Hi! To search LinkedIn right now, send /jobs followed by a number of hours, for example /jobs 6 (the last 6 hours). Plain /jobs searches the last 12 hours. Your scheduled digests arrive on their own, so there is nothing else you need to do.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "a3325a4f-3a22-47dc-bc6e-40120cd605b3",
+      "name": "Send Usage Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3744,
+        3744
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "CONFIGURE_ME",
+          "name": "Telegram account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -1201,7 +1306,7 @@
       "main": [
         [
           {
-            "node": "Read Config",
+            "node": "Is Jobs Command?",
             "type": "main",
             "index": 0
           }
@@ -1329,7 +1434,7 @@
       "main": [
         [
           {
-            "node": "Loop Over URLs",
+            "node": "More Pages?",
             "type": "main",
             "index": 0
           }
@@ -1600,6 +1705,53 @@
         [
           {
             "node": "Read Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "More Pages?": {
+      "main": [
+        [
+          {
+            "node": "Next Page URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next Page URL": {
+      "main": [
+        [
+          {
+            "node": "Wait Between Searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Jobs Command?": {
+      "main": [
+        [
+          {
+            "node": "Read Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Usage Telegram",
             "type": "main",
             "index": 0
           }
