@@ -493,7 +493,8 @@
           "id": "CONFIGURE_ME",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "id": "b2000001-0001-0001-0001-000000000025",

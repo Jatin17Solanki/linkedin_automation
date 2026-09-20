@@ -1065,7 +1065,8 @@
           "name": "Google Sheets account"
         }
       },
-      "continueOnFail": true
+      "continueOnFail": true,
+      "alwaysOutputData": true
     },
     {
       "parameters": {
