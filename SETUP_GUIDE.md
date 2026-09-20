@@ -1,6 +1,20 @@
 # LinkedIn Job Search V1 — Setup Guide
 
-> **Local development** setup is below. For **production deployment**, see [Part 2: GCP](#part-2-production-deployment-gcp-e2-micro) or [Part 3: AWS EC2](#part-3-production-deployment-aws-ec2) further down — both use the same Docker Compose + Caddy architecture, so pick whichever cloud you already have an account with.
+This project ships **3 independent workflows** — you don't need all three. Decide what you actually want before you start:
+
+| I want... | Set up | Section |
+|---|---|---|
+| Automated scheduled searches across all my companies, pushed to Telegram | **Main Job Search** workflow | Part 1 (below) — start here, this is the core project |
+| To look up one specific company on demand (`/search Oracle 30`), with a detailed email report | **Company Search** workflow (optional, additive) | [Part 1B](#part-1b-company-search-setup-search--optional) — needs a 2nd Telegram bot + Gmail |
+| Claude.ai to parse LinkedIn job URLs for me | **Job Parser** webhook + MCP server (optional, standalone) | [Part 1C](#part-1c-job-parser--mcp-server-setup-optional) — no Telegram/Sheets needed at all |
+
+All three get **imported automatically** the moment n8n starts (local or cloud) — "setting one up" past that point just means connecting its credentials and activating it. Skip Part 1B/1C entirely if you only want the main workflow; the other two just sit there imported-but-inactive with no side effects.
+
+> **Local vs. cloud:** everything below (Part 1, 1B, 1C) works identically whether n8n is running locally (`docker compose up`, this page) or on a cloud VM ([Part 2: GCP](#part-2-production-deployment-gcp-e2-micro) / [Part 3: AWS EC2](#part-3-production-deployment-aws-ec2)) — only the URL you open in your browser changes (`localhost:5678` vs `https://<VM_IP>.nip.io`). Read Part 2/3 first if you're deploying straight to the cloud without testing locally.
+
+---
+
+# Part 1: Main Job Search Workflow (Local Setup)
 
 ## Prerequisites
 - Docker Desktop running
@@ -199,6 +213,17 @@ Settings tab wins when both are set. Most users should just use the Settings tab
 
 Set env vars in `deploy/.env` (copy from `deploy/.env.example`) for cloud deployments, or pass them as `environment:` values in `docker-compose.yml` for local dev. `n8n_company_search_v1.json` (the on-demand `/search` workflow) uses the same Settings tab and precedence — both workflows stay in sync.
 
+### Updating these values later
+
+On a cloud VM (GCP or AWS), `deploy/setup-gcp.sh`/`setup-aws.sh` only prompt for these once, when they first create `/opt/n8n/.env` — re-running the script later doesn't re-ask or overwrite anything you've already set. To change a value after initial setup (rotate `GEMINI_API_KEY`, fix a mistyped `TELEGRAM_CHAT_ID`, adjust `N8N_MEM_LIMIT`, etc.):
+
+```bash
+sudo nano /opt/n8n/.env      # edit the value directly
+cd /opt/n8n && sudo docker compose up -d   # apply -- a plain `restart` does NOT re-read .env
+```
+
+This applies to any variable in the table above, not just the two the setup script prompts for.
+
 ### Adding multiple cities
 
 Two fields change, both comma-separated lists — `location_geo_id` (Settings tab) / `LOCATION_GEO_ID` (env var) does **not** need to change for multi-city within the same country; it stays at the broad India-level default.
@@ -249,6 +274,91 @@ The 4 search buckets (title patterns + which companies use "senior" for mid-leve
 ---
 ---
 
+# Part 1B: Company Search Setup (`/search` — optional)
+
+On-demand lookup for one specific company (`/search Oracle 30`), with a detailed email report on top of the Telegram reply. **Completely independent of the main workflow above** — has its own Telegram bot, doesn't touch the Results sheet, doesn't affect the main workflow's dedup or schedule. Skip this whole section if you only want scheduled automatic searches.
+
+**Steps 1–5 below work locally right now. Step 6 (activating it) needs HTTPS, so it only actually runs once you've done Part 2 or Part 3 (cloud deployment)** — Company Search's *only* trigger is a Telegram webhook, unlike the main workflow which also offers a Manual/local Webhook trigger for testing. Do steps 1–5 now if you're setting up locally first; just know `/search` itself won't respond until you're on a cloud VM.
+
+### 1 — Confirm the workflow is present
+
+Same as Part 1 Step 4 — open **Workflows** in n8n, confirm `LinkedIn Company Search V1` is listed (auto-imported by Docker, same as the other two).
+
+### 2 — Create a second, separate Telegram bot
+
+Telegram only supports **one webhook per bot** — you can't reuse the bot from Part 1. Message **@BotFather** → `/newbot` → save the new API token. **Message this new bot once** (e.g. `/start`) — same reason as Part 1: bots can't message a user who hasn't initiated contact first.
+
+### 3 — Add the Telegram credential in n8n
+
+**Credentials → Add Credential → Telegram** → paste the *new* bot's token → Save. This is a second, separate Telegram credential from Part 1's — don't reuse that one.
+
+### 4 — Reuse your existing Google Sheets credential
+
+No new OAuth setup needed — Company Search reads the **same** Google Sheet (Config, Settings, Resume tabs) via the **same** Google Sheets credential from Part 1, Step 3. You'll just attach that existing credential to this workflow's nodes in Step 6 below.
+
+### 5 — Set up a Gmail credential (for the email digest)
+
+1. In the same Google Cloud project you used for the Sheets OAuth Client (Part 1, Step 3) — **APIs & Services → Library** → search "Gmail API" → **Enable**
+2. **APIs & Services → Credentials → Create Credentials → OAuth Client ID** (or reuse the existing one — the **gmail.send** scope will be requested on first sign-in either way)
+3. In n8n: **Credentials → Add Credential → Gmail OAuth2** → connect using that Client ID/Secret → sign in, approve the `gmail.send` scope
+4. Open the **Send Gmail** node in the workflow → set **To** to your own email address (this is hardcoded per-node, not an env var — same pattern as Part 1's `sendTo`-style fields)
+
+### 6 — Connect credentials to nodes, then activate (cloud only)
+
+**Google Sheets credential** → `Read Config`, `Read Settings`, `Read Resume`
+**Telegram credential** (the new bot from step 2) → `Send Error Telegram`, `Send No Results Telegram`, `Send Results Telegram`, `Telegram Trigger`
+**Gmail credential** → `Send Gmail`
+
+Once you're on a cloud VM (Part 2/3): open the workflow → **enable** the `Telegram Trigger` node (right-click → Enable, it ships disabled like the main workflow's) → toggle **Active**. n8n registers the webhook with Telegram automatically.
+
+### 7 — Test
+
+Message your **new** bot: `/search Oracle 30`. You should get a Telegram reply, and — if Gemini matching succeeds — a follow-up email.
+
+---
+
+# Part 1C: Job Parser + MCP Server Setup (optional)
+
+A stateless webhook that turns a LinkedIn job URL into structured JSON — no Telegram, no Google Sheets, no credentials at all. Useful standalone, or as a tool Claude.ai can call directly via the included MCP server. Skip this section if you don't need either.
+
+### 1 — Confirm the workflow is present and activate it
+
+Open **Workflows** in n8n, confirm `LinkedIn Job Parser` is listed (auto-imported). Open it → toggle **Active** (top-right) — plain webhooks (unlike Telegram Trigger) don't need HTTPS, so this works locally right now, no cloud deployment required.
+
+### 2 — Test it directly
+
+```bash
+curl -X POST http://localhost:5678/webhook/parse-job \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://linkedin.com/jobs/view/4370408479"}'
+```
+(Swap in a real LinkedIn job URL — replace `localhost:5678` with `https://<VM_IP>.nip.io` once deployed to the cloud.) You should get back structured JSON — title, company, location, experience, description, etc.
+
+If you just wanted the webhook itself (e.g. for your own scripts), you're done — stop here.
+
+### 3 — Set up the MCP server (optional — lets Claude.ai/Claude Desktop call this directly)
+
+1. `cd mcp-server && npm install`
+2. Add this to your Claude Desktop config (Developer → Edit Config) — **the `env` block is required**, `mcp-server/index.js` refuses to start without `MCP_WEBHOOK_URL` set:
+   ```json
+   {
+     "mcpServers": {
+       "linkedin-job-parser": {
+         "command": "node",
+         "args": ["/absolute/path/to/mcp-server/index.js"],
+         "env": {
+           "MCP_WEBHOOK_URL": "http://localhost:5678/webhook/parse-job"
+         }
+       }
+     }
+   }
+   ```
+   Use your n8n instance's real address — `http://localhost:5678/webhook/parse-job` for local, `https://<VM_IP>.nip.io/webhook/parse-job` once deployed to the cloud (Part 2/3).
+3. Restart Claude Desktop — the `parse-linkedin-job` tool appears automatically. Try asking Claude to parse a LinkedIn job URL to confirm it works.
+
+---
+---
+
 # Part 2: Production Deployment (GCP e2-micro)
 
 Deploy n8n to a free GCP VM with HTTPS (needed for Telegram Trigger) and GitHub Actions CI/CD.
@@ -262,7 +372,24 @@ Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Doc
 - **VM:** GCP e2-micro, Ubuntu 22.04, us-central1-a (always-free tier)
 - **Domain:** `<VM_IP>.nip.io` (free wildcard DNS, no registration)
 - **HTTPS:** Let's Encrypt via Caddy (fully automatic)
-- **Cost:** $0/month (within GCP free tier)
+- **Cost:** $0/month (within GCP free tier — but see the note below before you rely on that)
+
+> **GCP's free tier has two separate parts, easy to conflate:** the **Free Trial** ($300 credit, 90 days) every new account starts on, and the **Always Free** tier (1 e2-micro instance/month, indefinitely) that this whole guide assumes. The Always Free tier only actually applies once you've **upgraded your account out of trial mode** (Billing → Upgrade — still $0 charged as long as you stay inside the always-free quota). If you let the 90-day trial lapse without upgrading, GCP suspends your resources at that boundary regardless of what you're actually using — you never get to "indefinite" at all. Do this before or right after creating your VM below, not after the trial has already run out.
+
+---
+
+## Before You Start — Gather These
+
+Two values the setup script will ask you for in Step 2.2 — get them ready now so you're not stuck mid-setup:
+
+| What | Where to get it | Notes |
+|------|------------------|-------|
+| **Gemini API key** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Free, no billing account needed. Powers the resume-matching % in your notifications. |
+| **Telegram chat ID** | Message **@userinfobot** on Telegram | It replies with your numeric user ID. This is *where* notifications get sent — separate from the bot token below. |
+
+You'll also need a Telegram **bot** (separate from the chat ID above) for Step 3.2 — if you haven't made one yet, message **@BotFather** → `/newbot` now and save the API token it gives you. **Also send your new bot any message right now** (e.g. `/start`) — bots can't message a user who hasn't initiated contact first, and skipping this causes a "chat not found" error later even with a correct token and chat ID.
+
+You can skip either of the first two at the setup script's prompt and set them later (see "Updating these values later" further down) — but having them ready now saves a round trip.
 
 ---
 
@@ -331,10 +458,11 @@ The script will:
 1. Install Docker and Docker Compose
 2. Set up a 2GB swapfile if none is active yet (required on the 1GB-RAM e2-micro — see `TROUBLESHOOTING.md`; set `LOW_MEMORY=false` before the command above to skip this on a larger VM)
 3. Create the Docker volumes n8n/Caddy data lives in
-4. Ask for n8n username and password (protects the web UI)
-5. Open ports 80/443 via iptables
-6. Pull the pre-built image from GitHub Container Registry (`ghcr.io/jatin17solanki/linkedin-automation-n8n:latest` by default — override via `DOCKER_IMAGE` in `deploy/.env` if you've forked the repo and publish your own) and start n8n + Caddy containers
-7. Print your n8n URL
+4. **Ask for n8n username and password** (protects the web UI) — **save these somewhere durable** (password manager, not just your terminal scrollback). This is your login for `https://<VM_IP>.nip.io` once the stack is up, it's not shown again after this prompt, and there's no "forgot password" flow — losing it means manually editing `/opt/n8n/.env` to reset it.
+5. **Ask for your Gemini API key and Telegram chat ID** from "Before You Start" above — each is echoed back and asks you to confirm before accepting it, since a typo here fails silently later (no error, notifications/LLM matching just don't work). Leave either blank to skip and set it later (see "Updating these values later" below).
+6. Open ports 80/443 via iptables
+7. Pull the pre-built image from GitHub Container Registry (`ghcr.io/jatin17solanki/linkedin-automation-n8n:latest` by default — override via `DOCKER_IMAGE` in `deploy/.env` if you've forked the repo and publish your own) and start n8n + Caddy containers
+8. Print your n8n URL
 
 All 3 workflow JSONs are already imported into the image (see Part 1, Step 1) — no manual import needed once the container is up.
 
@@ -486,7 +614,24 @@ Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Doc
 - **Domain:** `<VM_IP>.nip.io` (free wildcard DNS, no registration)
 - **HTTPS:** Let's Encrypt via Caddy (fully automatic)
 
-> **Cost difference from GCP, read before you start:** GCP's e2-micro free tier is **indefinite** (as long as you stay in an eligible region). AWS's free tier for `t2.micro`/`t3.micro` is **750 hours/month for the first 12 months only**, after which normal hourly billing applies (a few dollars/month for this instance class) unless you stop/terminate it. Set a calendar reminder. See **Costs** below for more detail, including a public-IPv4 charge AWS introduced in 2024 that GCP doesn't have an equivalent of.
+> **Cost difference from GCP, read before you start:** GCP's e2-micro can be free indefinitely (1 instance/month in an eligible region), but only once you've upgraded that account out of its 90-day Free Trial (see Part 2's note above) — AWS has no equivalent "upgrade" step to unlock an indefinite tier. AWS's free tier for `t2.micro`/`t3.micro` is **750 hours/month for the first 12 months only, full stop**, after which normal hourly billing applies (a few dollars/month for this instance class) unless you stop/terminate it. Set a calendar reminder. See **Costs** below for more detail, including a public-IPv4 charge AWS introduced in 2024 that GCP doesn't have an equivalent of.
+
+---
+
+## Before You Start — Gather These
+
+Same two values as Part 2 (GCP) — the setup script asks for them in Step 2.2:
+
+| What | Where to get it | Notes |
+|------|------------------|-------|
+| **Gemini API key** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Free, no billing account needed. Powers the resume-matching % in your notifications. |
+| **Telegram chat ID** | Message **@userinfobot** on Telegram | Numeric user ID — where notifications get sent, separate from the bot token below. |
+
+You'll also need a Telegram **bot** (for Step 3 below) — @BotFather → `/newbot`, save the token. **Message your new bot once** (e.g. `/start`) — bots can't message you first, and skipping this causes a "chat not found" error later even with a correct token/chat ID.
+
+You can leave either of the first two blank at the setup script's prompt and set them later (see Part 2's "Updating these values later").
+
+> **New AWS account?** A brand-new account is often placed under a verification hold ("Your account is pending verification... may take up to 2 days") that can block EC2 instance launches entirely — this has nothing to do with this project, it's a standard AWS anti-fraud check. There's no status tracker for it beyond opening a free Support Case (Account and Billing) if it drags past 48 hours. Confirm you can actually launch a `t2.micro` before working through the rest of this section.
 
 ---
 
@@ -562,10 +707,11 @@ The script will:
 1. Install Docker and Docker Compose
 2. Set up a 2GB swapfile if none is active yet (required on the 1GB-RAM `t2.micro`/`t3.micro` — see `TROUBLESHOOTING.md`; set `LOW_MEMORY=false` before the command above to skip this on a larger instance)
 3. Create the Docker volumes n8n/Caddy data lives in
-4. Ask for n8n username and password (protects the web UI)
-5. Open ports 80/443 via iptables **on the VM itself** — this is in addition to, not instead of, the Security Group you configured in Step 1.3. Both must allow the traffic
-6. Pull the pre-built image from GitHub Container Registry and start n8n + Caddy containers
-7. Print your n8n URL
+4. **Ask for n8n username and password** (protects the web UI) — **save these somewhere durable** (password manager, not just your terminal scrollback). This is your login for `https://<VM_IP>.nip.io` once the stack is up, it's not shown again after this prompt, and there's no "forgot password" flow.
+5. **Ask for your Gemini API key and Telegram chat ID** from "Before You Start" above — each is echoed back and asks you to confirm before accepting it, since a typo here fails silently later. Leave either blank to skip and set it later (see Part 2's "Updating these values later").
+6. Open ports 80/443 via iptables **on the VM itself** — this is in addition to, not instead of, the Security Group you configured in Step 1.3. Both must allow the traffic
+7. Pull the pre-built image from GitHub Container Registry and start n8n + Caddy containers
+8. Print your n8n URL
 
 All 3 workflow JSONs are already imported into the image (see Part 1, Step 1) — no manual import needed once the container is up.
 

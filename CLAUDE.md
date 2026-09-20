@@ -268,7 +268,7 @@ If a user asks you to change what job titles get filtered (e.g. "also exclude 's
 ```
 Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Docker volume)
 ```
-- VM: GCP e2-micro (always-free tier) or AWS EC2 t2.micro/t3.micro (12-month free tier), Ubuntu 22.04
+- VM: GCP e2-micro (free indefinitely, but only once the account is upgraded out of its 90-day/$300 Free Trial into standard billing — staying in trial mode means the VM gets suspended when the trial lapses, regardless of the Always Free quota; see `SETUP_GUIDE.md` Part 2) or AWS EC2 t2.micro/t3.micro (12-month free tier, full stop, then hourly billing), Ubuntu 22.04
 - Domain: `<VM_IP>.nip.io` (free, no DNS registration)
 - HTTPS: Let's Encrypt via Caddy (automatic)
 
@@ -286,21 +286,39 @@ Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Doc
 | `.github/workflows/deploy.yml` | CI/CD — auto-deploy all 3 workflow JSONs on push to main (secrets are still named `GCP_*` for historical reasons, but the target VM can be on either cloud — see SETUP_GUIDE.md's AWS Step 4) |
 | `.github/workflows/docker-publish.yml` | CI/CD — builds and publishes the Docker image to GHCR on push to main / version tags |
 
+### Before either VM setup: gather these first
+The setup script prompts for these interactively (Step 0 below), so have them ready before creating the VM, not mid-script:
+- **Gemini API key** — free, [aistudio.google.com/apikey](https://aistudio.google.com/apikey), no billing account needed
+- **Telegram chat ID** — message `@userinfobot` on Telegram, it replies with your numeric user ID
+- **Telegram bot token** — `@BotFather` → `/newbot` (needed later, for the n8n credential, not the script) — also message your new bot once (e.g. `/start`) now, since bots can't message a user who hasn't initiated contact first
+
 ### GCP VM Setup
-1. Create e2-micro VM (Ubuntu 22.04, us-central1-a) with HTTP/HTTPS firewall enabled
+0. Have the 3 values above ready
+1. Create e2-micro VM (Ubuntu 22.04, us-central1-a) with HTTP/HTTPS firewall enabled — **and upgrade the account out of Free Trial mode** (Billing → Upgrade) if you want the VM to keep running past 90 days, see the Architecture note above
 2. SSH in, clone the repo, run `sudo bash deploy/setup-gcp.sh`
-3. Open `https://<VM_IP>.nip.io`, set up Google Sheets + Telegram credentials
-4. Import workflow, enable Telegram Trigger node, activate workflow
-5. Generate n8n API key (Settings > API) for CI/CD
+3. The script prompts in order: n8n basic-auth username/password (**tell the user to save these somewhere durable — not shown again, no recovery flow**), then Gemini API key, then Telegram chat ID (both of the latter two are echoed back with a y/n confirmation before being accepted; leave either blank to skip and set later — see "Editing env vars after deploy" below)
+4. Open `https://<VM_IP>.nip.io`, log in with the basic-auth credentials from step 3, set up Google Sheets + Telegram credentials
+5. Import workflow, enable Telegram Trigger node, activate workflow
+6. Generate n8n API key (Settings > API) for CI/CD
 
 ### AWS EC2 VM Setup
+0. Have the 3 values above ready. **If this is a brand-new AWS account**, check first whether it's under AWS's new-account verification hold (console shows "pending verification... may take up to 2 days") — this can block EC2 instance launches entirely and has nothing to do with this project; there's no status page for it beyond opening a free Support Case if it drags past 48h
 1. Create a `t2.micro`/`t3.micro` VM (Ubuntu 22.04) with a Security Group allowing inbound 22/80/443 — **AWS gates traffic at the Security Group before it ever reaches the VM's own iptables rules**, unlike GCP; both must allow 80/443 or nothing gets through
 2. SSH in as `ubuntu` (not your AWS account name), clone the repo, run `sudo bash deploy/setup-aws.sh`
-3. Open `https://<VM_IP>.nip.io`, set up Google Sheets + Telegram credentials — identical to the GCP flow from here
-4. Import workflow, enable Telegram Trigger node, activate workflow
-5. Generate n8n API key (Settings > API) for CI/CD
+3. Same interactive prompt order/behavior as GCP step 3 above (basic auth → Gemini key → Telegram chat ID)
+4. Open `https://<VM_IP>.nip.io`, log in, set up Google Sheets + Telegram credentials — identical to the GCP flow from here
+5. Import workflow, enable Telegram Trigger node, activate workflow
+6. Generate n8n API key (Settings > API) for CI/CD
 
 Full walkthrough (Security Group config, Elastic IP, free-tier time limits, key-pair setup): `SETUP_GUIDE.md`'s Part 3.
+
+### Editing env vars after deploy
+`setup-gcp.sh`/`setup-aws.sh` only prompt once, when first creating `/opt/n8n/.env` (**not** the repo checkout's `deploy/.env` — that's only ever a template, never read by the running stack). Re-running the script later never re-prompts or overwrites existing values, only refreshes `VM_IP`. To change `GEMINI_API_KEY`, `TELEGRAM_CHAT_ID`, or anything else in the file (rotate a key, fix a typo, add a value that was left blank at setup):
+```bash
+sudo nano /opt/n8n/.env      # edit the value
+cd /opt/n8n && sudo docker compose up -d   # apply — a plain `restart` does NOT re-read .env
+```
+Verify what's actually set: `sudo docker compose exec n8n printenv | grep -E "GEMINI_API_KEY|TELEGRAM_CHAT_ID"`.
 
 ### VM Swap Configuration
 The e2-micro/t2.micro/t3.micro class of VM has only 1GB RAM. Without swap, the VM freezes completely when n8n's workflow run exhausts memory. `deploy/setup-gcp.sh`/`deploy/setup-aws.sh` (via `setup-common.sh`'s `setup_swapfile`) does this automatically — creates a 2GB swapfile and sets `vm.swappiness=10`, skipped if swap is already active, or if invoked with `LOW_MEMORY=false` on a VM with more RAM. Manual steps below are only needed on a VM whose setup script predates this automation:
@@ -554,6 +572,8 @@ New "Resume" tab in the same Google Sheet — two-column Key/Value layout:
 
 **Telegram bot setup:** Each workflow needs its own Telegram bot. The `/jobs` workflow uses one bot, the `/search` workflow uses another. Both bots can message the same chat (same `chatId`).
 
+Full human-facing walkthrough: `SETUP_GUIDE.md` Part 1B.
+
 ## Job Parser Webhook (`/parse-job`)
 
 A stateless webhook that accepts a LinkedIn job URL and returns structured JSON with the parsed job details. Designed as an MCP tool backend for Claude.ai.
@@ -637,13 +657,16 @@ A lightweight Node.js MCP server that exposes the job parser webhook as a tool f
 - **Output:** Formatted text with title, company, location, experience, seniority, apply URL, and full job description
 - **Backend:** POST to `https://<VM_IP>.nip.io/webhook/parse-job`
 
-**Claude Desktop config** (`claude_desktop_config.json`):
+**Claude Desktop config** (`claude_desktop_config.json`) — **the `env` block is required**, `mcp-server/index.js` reads `MCP_WEBHOOK_URL` from `process.env` at startup and exits immediately if it's unset:
 ```json
 {
   "mcpServers": {
     "linkedin-job-parser": {
       "command": "node",
-      "args": ["<path-to>/mcp-server/index.js"]
+      "args": ["<path-to>/mcp-server/index.js"],
+      "env": {
+        "MCP_WEBHOOK_URL": "https://<VM_IP>.nip.io/webhook/parse-job"
+      }
     }
   }
 }
@@ -651,8 +674,11 @@ A lightweight Node.js MCP server that exposes the job parser webhook as a tool f
 
 **Setup:**
 1. `cd mcp-server && npm install`
-2. Add the config above to Claude Desktop settings (Developer > Edit Config)
-3. Restart Claude Desktop — the `parse-linkedin-job` tool appears automatically
+2. Import + **activate** the `LinkedIn Job Parser` workflow in n8n first (plain webhook, no HTTPS/cloud required to test — works against a local instance too, `http://localhost:5678/webhook/parse-job`)
+3. Add the config above to Claude Desktop settings (Developer > Edit Config), with `MCP_WEBHOOK_URL` pointing at that instance's real `/webhook/parse-job` URL
+4. Restart Claude Desktop — the `parse-linkedin-job` tool appears automatically
+
+Full human-facing walkthrough: `SETUP_GUIDE.md` Part 1C.
 
 ## V2 Roadmap
 - Auto resume customization

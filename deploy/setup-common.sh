@@ -71,20 +71,72 @@ setup_swapfile() {
     sysctl -p > /dev/null
 }
 
-# Creates $DEPLOY_DIR/.env interactively (basic auth only -- everything else
-# is either left at its docker-compose.prod.yml default or set manually per
-# deploy/.env.example). Preserves an existing .env, just refreshing VM_IP.
+# Prompts for one value, echoes it back, and asks the user to confirm before
+# accepting it. Unlike a password, these values (API keys, numeric chat IDs)
+# are wrong in a way that isn't obvious from the prompt alone -- a typo just
+# silently breaks Telegram/Gemini later with no error pointing back here, so
+# showing what was typed and requiring an explicit "yes" catches it up front.
+# Leaving the input blank skips it (documented as settable later).
+# Result is written into the caller-named variable (nameref-by-string, bash
+# 3.2-safe via `printf -v` rather than `declare -n`, since setup-gcp.sh/
+# setup-aws.sh run under plain `bash`, no guaranteed 4.3+).
+prompt_confirmed_value() {
+    local prompt_label="$1"
+    local var_name="$2"
+    local value=""
+    local confirm=""
+    while true; do
+        read -rp "$prompt_label (leave blank to skip and set later): " value
+        if [ -z "$value" ]; then
+            echo "Skipped -- you can set this later, see \"Updating these values later\" in SETUP_GUIDE.md."
+            break
+        fi
+        echo "You entered: $value"
+        read -rp "Is this correct? (y/n): " confirm
+        case "$confirm" in
+            [Yy]*) break ;;
+            *) echo "Let's try that again." ;;
+        esac
+    done
+    printf -v "$var_name" '%s' "$value"
+}
+
+# Creates $DEPLOY_DIR/.env interactively -- n8n basic auth (masked), plus
+# GEMINI_API_KEY/TELEGRAM_CHAT_ID (shown + confirmed, see prompt_confirmed_value
+# above) since without those two, LLM matching and Telegram notifications
+# silently don't work with no error pointing back at a missing env var.
+# Everything else stays at its docker-compose.prod.yml default or gets set
+# manually per deploy/.env.example. Preserves an existing .env, just
+# refreshing VM_IP -- re-running this script never re-prompts or overwrites
+# values you already set.
 create_env_file() {
     local env_file="$DEPLOY_DIR/.env"
     if [ ! -f "$env_file" ]; then
         echo "Creating .env file..."
+        echo ""
+        echo "-- n8n web UI login --"
+        echo "IMPORTANT: save this username/password somewhere durable (password manager,"
+        echo "not just your terminal scrollback) -- this is what you'll use to log into"
+        echo "the n8n web UI at https://<VM_IP>.nip.io once the stack is up. It is NOT"
+        echo "shown again after this prompt, and there's no 'forgot password' recovery --"
+        echo "if you lose it, you'd need to re-edit $DEPLOY_DIR/.env by hand to reset it."
         read -rp "Enter n8n basic auth username: " N8N_USER
         read -rsp "Enter n8n basic auth password: " N8N_PASS
         echo
+        echo ""
+        echo "-- Required for LLM resume matching + Telegram notifications --"
+        echo "Get these ready beforehand if you haven't already:"
+        echo "  Gemini API key: https://aistudio.google.com/apikey (free, no billing account needed)"
+        echo "  Telegram chat ID: message @userinfobot on Telegram"
+        echo ""
+        prompt_confirmed_value "Enter your Gemini API key" GEMINI_KEY
+        prompt_confirmed_value "Enter your Telegram chat ID" TELEGRAM_ID
         cat > "$env_file" <<EOF
 VM_IP=$VM_IP
 N8N_BASIC_AUTH_USER=$N8N_USER
 N8N_BASIC_AUTH_PASSWORD=$N8N_PASS
+GEMINI_API_KEY=$GEMINI_KEY
+TELEGRAM_CHAT_ID=$TELEGRAM_ID
 EOF
         chmod 600 "$env_file"
         echo ".env file created at $env_file"
