@@ -52,7 +52,7 @@ n8n workflows that automatically search LinkedIn for job openings at target comp
      |-----|---------|----------|
      | Config | Company, CompanyID, Bucket, Active, Notes | [`config_data.csv`](examples/google-sheet/config_data.csv) |
      | Results | JobID, Title, Company, Location, Link, ExperienceReq, PrimaryTag, FirstSeen, Notified, Score, Status | [`results_template.csv`](examples/google-sheet/results_template.csv) (headers only — the workflow writes rows here) |
-     | Settings | Key, Value (location/experience/match-threshold overrides) | [`settings_template.csv`](examples/google-sheet/settings_template.csv) — edit anytime, no restart needed; blank a value to fall back to its env var |
+     | Settings | Key, Value (location/experience/match-threshold overrides, plus `notify_email` for Company Search's email digest) | [`settings_template.csv`](examples/google-sheet/settings_template.csv) — edit anytime, no restart needed; blank a value to fall back to its env var |
      | Resume | Key, Value (your profile as key-value pairs) | [`resume_template.csv`](examples/google-sheet/resume_template.csv) |
 
    **Filling in the Resume tab from your actual resume:** typing 12 key/value rows by hand is tedious and easy to get wrong. Instead, give the prompt below (with your resume attached or pasted) to any LLM — it's not tied to a specific model or tool — and it'll return JSON you can paste directly into `bootstrap.gs`'s `RESUME_JSON` variable (see the comment near the top of that file) before running it, which populates the Resume tab for you in the exact shape the workflow expects. Skip this and use the placeholder values from `resume_template.csv` if you'd rather fill it in by hand.

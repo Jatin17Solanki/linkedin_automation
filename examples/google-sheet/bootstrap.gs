@@ -13,7 +13,9 @@
  * experience/match-threshold env vars documented in SETUP_GUIDE.md — the
  * workflow reads it fresh on every run, no container restart needed. Leave
  * a Settings row's Value blank to fall back to the matching env var, or to
- * the hardcoded default if that's blank too.
+ * the hardcoded default if that's blank too. (Exception: notify_email, the
+ * /search workflow's email recipient, has no env var -- blank just skips that
+ * workflow's email digest; Telegram results are unaffected.)
  *
  * How to use:
  *   1. Create a new blank Google Sheet.
@@ -32,7 +34,9 @@
  *   7. If you left RESUME_JSON blank, edit the Resume tab with your own
  *      profile by hand. Edit the Config tab with the companies you actually
  *      want to track, and the Settings tab if you want different location/
- *      experience/match-threshold values than the Bengaluru/4yr defaults.
+ *      experience/match-threshold values than the Bengaluru/4yr defaults, and
+ *      fill in the Settings tab's notify_email row if you use the /search
+ *      workflow and want its email digest.
  *
  * If you forked this repo and changed examples/google-sheet/config_data.csv,
  * settings_template.csv, or resume_template.csv, update REPO_RAW_BASE below

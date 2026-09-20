@@ -103,6 +103,44 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Already running an older workflow copy?** Fixing the sheet (above) is enough for the header-row cause. For the other causes, don't re-import the workflow (that resets your Google Sheets node selections — next entry); paste the updated code straight into the one node: open `Prepare LLM Input` → replace its code with the version from the current `n8n_job_search_v1.json` / `n8n_company_search_v1.json`.
 
+## Company Search answers on Telegram but no email arrives
+
+**Symptom:** `/search Oracle 30` returns the Telegram message but no email digest, and nothing shows as an error.
+
+**Root cause (most likely):** the recipient comes from the Settings tab's `notify_email` row, read by `Format Email`. If that row is blank, missing (a Settings tab created before this key existed doesn't have the row), or isn't a valid address, the email step is deliberately **skipped** — Telegram results are unaffected — and `Format Email`'s execution output/log says so: *"No valid notify_email in the Settings tab -- skipping the email digest"*, or lists the invalid address it ignored.
+
+**Fix:** in the Settings tab add/fill the row — Key `notify_email`, Value your address (comma-separated for several). No restart or re-import; it applies on the next `/search`.
+
+**Other reasons no email arrives:** the LLM step failed (the email is only sent when matching succeeded — Telegram will show "AI matching unavailable"; see the entry above), or the Gmail credential isn't connected / `gmail.send` wasn't approved (then `Send Gmail` itself shows an error).
+
+**Upgrading from a version where you typed the address into the `Send Gmail` node?** That value is no longer used — the node's **To** is now `{{ $json.sendTo }}`, and re-importing/updating the workflow replaces whatever you typed there. Add the Settings row.
+
+## Company Search fails with "The service is receiving too many requests" (Sheets quota exceeded)
+
+**Symptom:** `/search …` errors on `Read Settings` (or another Google Sheets node) with *"The service is receiving too many requests from you — Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com'"*. The node's panel also says *"This node runs multiple times, once for each input item."*
+
+**Root cause:** not an attack, and nothing to do with LinkedIn — it's Google's per-user Sheets read quota (60 read requests per minute by default), exhausted by the workflow itself. A Sheets node runs **once per input item**, and a Sheets read emits **one item per row**. In `n8n_company_search_v1.json`, `Read Config` returns one item per Config row (~50 companies) and `Read Settings` was wired directly after it, so **every `/search` made ~50 back-to-back reads of the Settings tab** (introduced by the Settings-tab change in #25 — before it, nothing sat between `Read Config` and `Lookup Company`); a second `/search` inside the same minute tipped it over. Separately, `Read Resume` sits after the job loop's "done" output, which emits one item per job found, so it added one more read per job. (The main workflow is unaffected: its `Store Config` / `Trigger Read` Code nodes collapse the items to one before the next Sheets node.)
+
+**Fix:** `Read Settings` and `Read Resume` now have n8n's **Execute Once** setting on — about 3 Sheets reads per `/search` instead of 50+. On an already-imported instance don't wait for a re-import: open each of those two nodes → **Settings** → turn on **Execute Once** (takes effect immediately). The quota window is per minute, so wait about a minute before retrying the failed run.
+
+**If it still happens:** avoid firing several `/search` runs within a minute; the main workflow's scheduled runs share the same per-user quota; and you can raise the limit in Google Cloud Console → APIs & Services → Google Sheets API → Quotas.
+
+## Company Search says "Company '…' not found in config" for a company that IS in your Config tab
+
+**Symptom:** `/search Oracle 30` replies *Company 'oracle' not found in config…* even though the company is right there in the Config tab (whether or not it's Active).
+
+**Root cause:** `Lookup Company` built its company list from `$input` — whatever the previous node passed it. When the Settings-tab change (#25) put `Read Settings` and `Store Settings` between `Read Config` and `Lookup Company`, its input became `Store Settings`' single status item instead of the Config rows, so no company could ever match. The per-node tests at the time fed `Lookup Company` the Config rows directly, which is why they never saw it.
+
+**Fix:** `Lookup Company` now reads `$('Read Config').all()` directly. On an already-imported instance without re-importing: open `Lookup Company` and change the line `const config = $input.all().map(i => i.json);` to `const config = $('Read Config').all().map(i => i.json);`.
+
+## Clicking one node in the editor opens a different node
+
+**Symptom:** e.g. clicking `Read Settings` in the company-search workflow opens `Send Gmail`; credentials or edits seem to land on the wrong node.
+
+**Root cause:** two nodes in the workflow JSON had the same `id`, and n8n's editor resolves nodes by id. It existed in `n8n_company_search_v1.json` until PR #32 (`Read Settings` and `Send Gmail` shared an id). The file was valid JSON, so `JSON.parse`-style checks never flagged it.
+
+**Fix:** use a version with the fix. An already-imported workflow keeps the duplicate ids in n8n's database (auto-import only runs on first start), so delete that workflow in n8n and re-import the fixed JSON (⋯ → Import from File / URL) — ideally before you wire credentials, since a re-import resets them. Or update it through `deploy/import-workflow.sh` (a PUT replaces the nodes). To check any workflow file yourself, use the snippet in `CLAUDE.md` → "Editing workflow JSON — agent checklist".
+
 ## Re-importing a workflow resets your Google Sheets node selections
 
 **Symptom:** After using **⋯ → Import from File** to pick up an updated `n8n_job_search_v1.json` (e.g. a new release, or a node you edited by hand), most Google Sheets nodes' **Document** field reverts to the placeholder, and re-selecting your Sheet also blanks out the **Sheet** field, requiring you to set both by hand again.

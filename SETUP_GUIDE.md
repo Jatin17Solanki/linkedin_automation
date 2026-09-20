@@ -205,6 +205,7 @@ Settings tab wins when both are set. Most users should just use the Settings tab
 | `MAX_EXPERIENCE_YEARS` | `max_experience_years` | `4` | Upper bound of the experience bracket you're targeting |
 | `MIN_EXPERIENCE_YEARS` | `min_experience_years` | `0` (no floor) | Lower bound of the experience bracket you're targeting. Together with `MAX_EXPERIENCE_YEARS`: a role matches if its own stated range overlaps `[MIN, MAX]` at all — touching boundaries count as a match, and open-ended postings ("5+ years") always satisfy the upper-bound side since they have no ceiling to compare. Deliberately permissive: e.g. targeting `3-5`, a "2-4 years" posting matches, and so does "5+ years", but "8+ years" doesn't. Defaults reproduce the original single-ceiling behavior exactly. |
 | `MIN_MATCH_PERCENT` | `min_match_percent` | `0` (no suppression) | Hide jobs scoring below this % from the Telegram message (still logged to the Results sheet and marked notified — see `CLAUDE.md`'s Settings tab section) |
+| *(none — Settings tab only)* | `notify_email` | *(blank — no email)* | **Company Search only:** address(es) its email digest is sent to (comma-separated is fine). Deliberately not an env var. Blank, missing or invalid → the email is skipped (Telegram results are unaffected) and `Format Email`'s log says why. See Part 1B, step 5 |
 | `VM_IP` | — | — | Set by `deploy/setup-gcp.sh` (or `setup-aws.sh`); used for the `nip.io` HTTPS domain |
 | `DOCKER_IMAGE` | — | `ghcr.io/jatin17solanki/linkedin-automation-n8n:latest` | Pre-built image to pull for production; override if you've forked the repo and publish your own |
 | `N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD` | — | — | Protects the n8n web UI on cloud deployments |
@@ -303,7 +304,7 @@ No new OAuth setup needed — Company Search reads the **same** Google Sheet (Co
 1. In the same Google Cloud project you used for the Sheets OAuth Client (Part 1, Step 3) — **APIs & Services → Library** → search "Gmail API" → **Enable**
 2. **APIs & Services → Credentials → Create Credentials → OAuth Client ID** (or reuse the existing one — the **gmail.send** scope will be requested on first sign-in either way)
 3. In n8n: **Credentials → Add Credential → Gmail OAuth2** → connect using that Client ID/Secret → sign in, approve the `gmail.send` scope
-4. Open the **Send Gmail** node in the workflow → set **To** to your own email address. It ships as `CONFIGURE_ME@example.com` and is set per-node (not an env var), so nothing will be sent to you until you change it.
+4. **Choose who receives the email — in your Sheet, not in the node.** Open the **Settings** tab and fill in the row with Key `notify_email` and Value = your address (comma-separated for several). `Send Gmail`'s **To** field is the expression `{{ $json.sendTo }}`, filled from that row — there's nothing to type into the node. A Settings tab made with the current `bootstrap.gs` already has the row (blank); on an older tab, add it by hand below the existing rows (Key in column A, Value in column B — row 1 stays the literal `Key`/`Value` header). **Left blank or invalid, the email is simply skipped**: the Telegram reply still arrives and `Format Email`'s execution log says why. Changes take effect on the next `/search` — no restart, no re-import.
 
 ### 6 — Connect credentials, point the Sheets nodes at your Sheet, then activate
 
@@ -320,7 +321,7 @@ Open the `LinkedIn Company Search V1` workflow and, for each node with a ⚠️:
 
 ### 7 — Test
 
-Message your **new** bot: `/search Oracle 30`. You should get a Telegram reply, and — if Gemini matching succeeds — a follow-up email.
+Message your **new** bot: `/search Oracle 30`. You should get a Telegram reply, and — if Gemini matching succeeds **and** `notify_email` is set — a follow-up email. Telegram reply but no email? See `TROUBLESHOOTING.md` ("Company Search answers on Telegram but no email arrives").
 
 ---
 
