@@ -799,6 +799,15 @@ The Docker image copies the three workflows into n8n **only the first time a con
    Add `DRY_RUN=true` in front of the command to write the merged result to `merged-preview.json` and change nothing on the instance. `PRESERVE_WIRING=false` imports the file exactly as shipped instead.
 3. Open each workflow in n8n and check the Active toggle. If a workflow could not be activated (the script prints a `NOTE`), attach the missing credential and switch it on.
 
+**If the script stops with an `ERROR`,** it changed nothing, and the message says why:
+
+| Message | Meaning / fix |
+|---|---|
+| `Could not reach n8n at …` | The address is wrong or unreachable from where you ran it. Use exactly the address you open in the browser (`https://<VM_IP>.nip.io`), and check n8n is running (`sudo docker compose ps` in `/opt/n8n`). |
+| `n8n refused the API key (HTTP 401)` | Create a key under **Settings → API** in n8n and use it as the third argument. |
+| `no workflow named '…' exists` | It lists the workflows it can see. If you renamed one, rename it back to exactly the name shown. Add `CREATE_IF_MISSING=true` only if you really want a new workflow created. |
+| `Could not read the live workflow` / `Could not merge` | It stops rather than import over your wiring. Retry, or add `PRESERVE_WIRING=false` to import the file as shipped (you'd then re-attach credentials, see 3.4). |
+
 > This has been tested against a mock of n8n's API, not yet against a live instance — so keep the fallback below in mind, and glance at each workflow after the first update.
 
 ### Other options

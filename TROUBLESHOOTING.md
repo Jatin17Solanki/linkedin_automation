@@ -175,6 +175,14 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Fix:** use a shorter window, or split the busiest group: a bucket with many companies (Bucket 4 in the starter list has 68) fills the cap fastest. The cap is `MAX_PAGES` in the `Filter & Accumulate Links` node (`Filter Links` in Company Search). An instance imported before this change still has the old one-page behavior — see the "fix isn't applying" entry above.
 
+## The update script printed "No existing workflow found. Creating new..." and stopped
+
+**Symptom:** running `deploy/import-workflow.sh` prints only `Checking for existing workflow named '…'` and `No existing workflow found. Creating new...`, then nothing.
+
+**Root cause:** an older version of the script hid every error from its first request. If n8n couldn't be reached (wrong address, n8n down) or the API key was refused, it behaved as if the workflow didn't exist, tried to create a duplicate, and then exited silently on the connection failure. Nothing was changed in that case.
+
+**Fix:** `git pull` for the current script, which stops with a specific message instead (`Could not reach n8n…`, `n8n refused the API key…`, or the list of workflows it can see if the name doesn't match) and never creates a workflow unless you pass `CREATE_IF_MISSING=true`. To check by hand: `curl -s -o /dev/null -w "%{http_code}\n" -H "X-N8N-API-KEY: <key>" https://<VM_IP>.nip.io/api/v1/workflows` should print `200`; `401` is a bad key, `000` means it can't connect. If a duplicate workflow did get created, delete the copy with the placeholder credentials and keep your original.
+
 ## Your bots ignore your messages (no reply at all)
 
 **Symptom:** you message Bot #1 or Bot #2 and nothing happens — not even the usage help.
