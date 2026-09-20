@@ -82,6 +82,19 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Fix:** Row 1 of the Settings/Resume tab must be exactly `Key` and `Value` as plain header text; your actual data starts at row 2. As of 2026-08-25, `Store Settings` logs an explicit warning (`WARNING: Settings tab has N row(s) but none had a recognizable Key column...`, visible in that node's execution output) when this happens, showing you exactly what row 1 was read as — check n8n's execution log for that node if a Settings value doesn't seem to be taking effect.
 
+## "AI matching unavailable this run" even though the Resume tab has data
+
+**Symptom:** Telegram (or the company-search email) comes through in the plain format with no match %, plus the "AI matching unavailable" warning — and in n8n's execution view, `Prepare LLM Input` outputs `{ "llmRequired": false, "reason": "resume_empty" }` even though `Read Resume` clearly returned rows.
+
+**Root cause:** `Prepare LLM Input` decides whether the Resume tab is usable *before* calling Gemini. Until 2026-09-20 it required a row whose Key was exactly `name` with a non-blank Value, so several harmless-looking sheets all read as "empty": a blank `name` cell (e.g. a `RESUME_JSON` that used `full_name` — `bootstrap.gs` drops unexpected keys and leaves `name` blank), a `Name`-cased key, or lowercase `key`/`value` headers. Every other row could be perfectly filled in and it still skipped LLM matching for the whole run.
+
+**Fix:** already applied — it now only needs at least one non-blank value, and matches the `Key`/`Value` column names case-insensitively. If it still skips, the `reason` in that node's output panel (no server logs needed) says why:
+- `resume_missing_key_column` — none of the columns n8n read are named Key/Value. The output includes `columnsSeen`, showing what n8n actually treated as the header row — usually row 1 of the tab isn't literally `Key`/`Value` (see the Settings/Resume entry above).
+- `resume_all_values_blank` — the Key column is there but every Value cell is empty.
+- `no_jobs` — nothing to do with the Resume tab; there were no new jobs to score this run.
+
+**Already running an older copy?** Re-importing the workflow resets your Google Sheets node selections (next entry), so instead paste the updated code straight into the one node: open `Prepare LLM Input` → replace its code with the version from the current `n8n_job_search_v1.json` / `n8n_company_search_v1.json`.
+
 ## Re-importing a workflow resets your Google Sheets node selections
 
 **Symptom:** After using **⋯ → Import from File** to pick up an updated `n8n_job_search_v1.json` (e.g. a new release, or a node you edited by hand), most Google Sheets nodes' **Document** field reverts to the placeholder, and re-selecting your Sheet also blanks out the **Sheet** field, requiring you to set both by hand again.
