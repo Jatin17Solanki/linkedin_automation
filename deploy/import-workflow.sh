@@ -28,27 +28,31 @@ export WORKFLOW_NAME
 
 echo "Checking for existing workflow named '$WORKFLOW_NAME'..."
 
+# Scratch space. n8n's workflow list contains every workflow in full (nodes, code, ...) and is easily several MB,
+# so it is kept in FILES: putting a reply that size in an environment variable or command-line argument makes
+# Linux refuse to start any further program ("Argument list too long").
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
+
 # List the workflows. A FAILED listing must never be mistaken for "not found": that used to fall through to creating
 # a duplicate workflow while hiding the real problem (e.g. n8n unreachable).
-LIST_RESPONSE=$(curl -sS -w "\n%{http_code}" -H "X-N8N-API-KEY: $API_KEY" "$API_URL/workflows?limit=250") || \
+LIST_CODE=$(curl -sS -o "$TMP_DIR/list.json" -w "%{http_code}" -H "X-N8N-API-KEY: $API_KEY" "$API_URL/workflows?limit=250") || \
     fail "Could not reach n8n at $N8N_URL (curl's message is above). Check the address (https://<VM_IP>.nip.io), that n8n is running, and that this machine can reach it. Nothing was changed."
-LIST_CODE=$(echo "$LIST_RESPONSE" | tail -1)
-LIST_BODY=$(echo "$LIST_RESPONSE" | sed '$d')
 case "$LIST_CODE" in
     2??) ;;
     401) fail "n8n refused the API key (HTTP 401). Create one in n8n under Settings > API and pass it as the third argument. Nothing was changed." ;;
-    *)   fail "Listing workflows failed (HTTP $LIST_CODE): $(echo "$LIST_BODY" | head -c 300). Nothing was changed." ;;
+    *)   fail "Listing workflows failed (HTTP $LIST_CODE): $(head -c 300 "$TMP_DIR/list.json"). Nothing was changed." ;;
 esac
 
-export LIST_BODY
 PARSED=$(python3 -c "
-import json, os
-wfs = json.loads(os.environ['LIST_BODY']).get('data', [])
+import json, os, sys
+with open(sys.argv[1], encoding='utf-8') as f:
+    wfs = json.load(f).get('data', [])
 target = os.environ['WORKFLOW_NAME']
 print(next((w['id'] for w in wfs if w.get('name', '') == target), ''))
 for w in wfs:
     print(w.get('name', ''))
-") || fail "Unexpected reply from n8n (not a workflow list): $(echo "$LIST_BODY" | head -c 300). Nothing was changed."
+" "$TMP_DIR/list.json") || fail "Unexpected reply from n8n (not a workflow list): $(head -c 300 "$TMP_DIR/list.json"). Nothing was changed."
 EXISTING=$(echo "$PARSED" | head -1)
 
 if [ -n "$EXISTING" ]; then
@@ -58,7 +62,6 @@ if [ -n "$EXISTING" ]; then
     # wiring over so an update does not reset it (see merge-workflow.py for exactly what).
     PAYLOAD="$WORKFLOW_FILE"
     if [ "${PRESERVE_WIRING:-true}" = "true" ]; then
-        TMP_DIR=$(mktemp -d)
         LIVE_CODE=$(curl -sS -o "$TMP_DIR/live.json" -w "%{http_code}" -H "X-N8N-API-KEY: $API_KEY" "$API_URL/workflows/$EXISTING") || \
             fail "Could not read the live workflow from n8n. Nothing was changed."
         [ "$LIVE_CODE" = "200" ] || fail "Could not read the live workflow (HTTP $LIVE_CODE). Nothing was changed."
@@ -83,7 +86,7 @@ if [ -n "$EXISTING" ]; then
     if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
         echo "Workflow updated successfully."
     else
-        fail "Failed to update workflow (HTTP $HTTP_CODE): $BODY"
+        fail "Failed to update workflow (HTTP $HTTP_CODE): ${BODY:0:300}"
     fi
 
     # Activate the workflow (n8n public API: POST /workflows/{id}/activate)
@@ -127,7 +130,7 @@ else
             fi
         fi
     else
-        fail "Failed to create workflow (HTTP $HTTP_CODE): $BODY"
+        fail "Failed to create workflow (HTTP $HTTP_CODE): ${BODY:0:300}"
     fi
 fi
 
