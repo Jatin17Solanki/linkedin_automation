@@ -5,8 +5,8 @@ name: Deploy Workflow to n8n
 # own fork and edit the workflows; regular users can ignore it. It needs the repo
 # secrets GCP_VM_IP, GCP_SSH_USER, GCP_SSH_PRIVATE_KEY and N8N_API_KEY (see
 # SETUP_GUIDE.md). It deliberately does NOT run on push: without those secrets it
-# would fail on every merge, and re-importing can reset per-node settings such as
-# credential and Sheet selections on the target instance.
+# would fail on every merge. The import keeps each existing node's credentials,
+# spreadsheet selection and enabled state (deploy/merge-workflow.py).
 # Run it from the Actions tab: Deploy Workflow to n8n -> Run workflow.
 on:
   workflow_dispatch: {}
@@ -24,7 +24,7 @@ jobs:
           host: ${{ secrets.GCP_VM_IP }}
           username: ${{ secrets.GCP_SSH_USER }}
           key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
-          source: "n8n_job_search_v1.json,n8n_company_search_v1.json,n8n_job_parser_v1.json,deploy/import-workflow.sh"
+          source: "n8n_job_search_v1.json,n8n_company_search_v1.json,n8n_job_parser_v1.json,deploy/import-workflow.sh,deploy/merge-workflow.py"
           target: "/tmp/n8n-deploy"
           overwrite: true
 

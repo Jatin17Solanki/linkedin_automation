@@ -776,20 +776,37 @@ To check what's actually set: `sudo docker compose exec n8n printenv | grep -E "
    | `N8N_API_KEY` | The key from step 1 |
 5. **Test:** push an edit to a workflow JSON, then run the action from the Actions tab.
 
-Importing replaces a workflow's definition on your instance, so afterwards re-check that the credentials and Google Sheet are still selected on each node ([3.4](#34-worked-example-connect-one-node)).
+The import keeps the credentials, spreadsheet selections and enabled/disabled state you set on nodes that already exist (see [6.2](#62-updating-an-existing-instance)); check the workflow afterwards anyway, especially any node the release added.
 
 ## 6.2 Updating an existing instance
 
-The Docker image copies the three workflows into n8n **only the first time a container starts**. So pulling a newer image or a newer copy of the repo updates n8n itself but **not** the workflows already stored in your instance — you keep whichever version was imported first. If a fix you read about in the repo doesn't seem to apply on your VM, this is why. Your options, gentlest first:
+The Docker image copies the three workflows into n8n **only the first time a container starts**. So pulling a newer image or a newer copy of the repo updates n8n itself but **not** the workflows already stored in your instance — you keep whichever version was imported first. If a fix you read about in the repo doesn't seem to apply on your VM, this is why.
 
-1. **Paste the change into the one node.** If the fix is a Code node's JavaScript, copy the new code into that node in the n8n editor. Nothing else is touched, no credentials reset.
-2. **Delete and re-import the workflow.** ⋯ → **Import from URL** / **Import from File** with the current `n8n_*.json`. Cleanest, but **all credential and spreadsheet selections reset** — redo [3.4](#34-worked-example-connect-one-node).
-3. **`deploy/import-workflow.sh`** (what the optional CI/CD in 6.1 runs) updates a workflow in place through the API. The same reset applies.
+### Recommended: the update script (keeps your credentials and spreadsheet)
+
+`deploy/import-workflow.sh` updates a workflow in place through n8n's API **and carries over what you set up**: for every node that already exists, it keeps the credentials you attached, the spreadsheet and tab you picked on Google Sheets nodes, whether the node is enabled (your Telegram Trigger stays on) and its webhook id. A node that is *new* in the release and needs a credential (for example a new Telegram node) reuses the one you already have. Everything else — code, settings, wiring — comes from the new version.
+
+1. In n8n: **Settings → API → Create an API key** and copy it.
+2. On the VM (or anywhere with `git`, `curl` and `python3`):
+   ```bash
+   cd ~/linkedin_automation && git pull
+   for f in n8n_job_search_v1.json n8n_company_search_v1.json n8n_job_parser_v1.json; do
+     bash deploy/import-workflow.sh "$f" "https://<YOUR_VM_IP>.nip.io" "<YOUR_N8N_API_KEY>"
+   done
+   ```
+   Add `DRY_RUN=true` in front of the command to write the merged result to `merged-preview.json` and change nothing on the instance. `PRESERVE_WIRING=false` imports the file exactly as shipped instead.
+3. Open each workflow in n8n and check the Active toggle. If a workflow could not be activated (the script prints a `NOTE`), attach the missing credential and switch it on.
+
+> This has been tested against a mock of n8n's API, not yet against a live instance — so keep the fallback below in mind, and glance at each workflow after the first update.
+
+### Other options
+
+1. **Paste the change into the one node.** If the fix is a Code node's JavaScript, copy the new code into that node in the n8n editor. Nothing else is touched.
+2. **Delete and re-import the workflow** (⋯ → **Import from URL** / **Import from File**). Cleanest, but **all credential and spreadsheet selections reset** — redo [3.4](#34-worked-example-connect-one-node).
 
 Updating n8n's own image: `cd /opt/n8n && sudo docker compose pull n8n && sudo docker compose up -d`.
 
 **Changes to the Docker Compose file** (for example the telemetry-off settings added later) also don't reach a VM you set up earlier, because the setup script copies `deploy/docker-compose.prod.yml` to `/opt/n8n/docker-compose.yml` once. To pick them up: `cd ~/linkedin_automation && git pull && sudo cp deploy/docker-compose.prod.yml /opt/n8n/docker-compose.yml && cd /opt/n8n && sudo docker compose up -d`. Your `.env` (keys, passwords) and your data volumes are untouched.
-
 ## 6.3 Costs
 
 ### AWS

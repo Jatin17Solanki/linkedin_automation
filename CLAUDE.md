@@ -316,6 +316,7 @@ Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Doc
 | `deploy/setup-gcp.sh` | One-time GCP VM setup — GCP IP autodetection + the shared logic above |
 | `deploy/setup-aws.sh` | One-time AWS EC2 VM setup — EC2 IMDSv2 IP autodetection + the shared logic above |
 | `deploy/import-workflow.sh` | Import/update workflow via n8n REST API; matches the target workflow by its `name` field (not a hardcoded substring), so the same script works for all 3 workflow JSONs |
+| `deploy/merge-workflow.py` | Used by import-workflow.sh: merges the live instance's per-node wiring (credentials, Sheets documentId/sheetName, disabled, webhookId) into the shipped JSON so an update does not reset it; new nodes reuse an existing credential of the same kind. `DRY_RUN=true` / `PRESERVE_WIRING=false` on the import script. Tested against a mock n8n API only |
 | `.github/workflows/deploy.yml` | CI/CD — OPTIONAL, manual-only (`workflow_dispatch`): pushes all 3 workflow JSONs to a VM; only useful to fork maintainers (secrets are still named `GCP_*` for historical reasons, but the target VM can be on either cloud — see SETUP_GUIDE.md's AWS Step 4) |
 | `.github/workflows/docker-publish.yml` | CI/CD — builds and publishes the Docker image to GHCR on push to main / version tags |
 
