@@ -122,11 +122,14 @@ Regex: `/-(\d{8,})(?:\?|$)/` — extracts the numeric job ID from LinkedIn URLs 
 | `location_city_names` | `LOCATION_CITY_NAMES` | `bengaluru,bangalore,karnataka` |
 | `max_experience_years` | `MAX_EXPERIENCE_YEARS` | `4` |
 | `min_experience_years` | `MIN_EXPERIENCE_YEARS` | `0` |
+| `notify_email` | *(none — Settings tab only)* | blank → Company Search email digest skipped |
 
 `min_experience_years`/`max_experience_years` together describe the experience bracket you're targeting (e.g. "3 to 5 years"). A role matches if its own stated range overlaps this bracket at all, touching boundaries counted as a match — a "2-4 years" posting matches a `3-5` target, and so does an open-ended "5+ years" posting (no ceiling to compare against, so it always satisfies the upper bound). Deliberately permissive: implemented in `Process & Filter Job` as `jobMin <= MAX_EXPERIENCE_YEARS && jobMax >= MIN_EXPERIENCE_YEARS` (jobMax = `Infinity` for open-ended roles), biased toward false positives over dropping borderline roles. Defaults (`min=0`, `max=4`) reproduce the original single-ceiling behavior exactly. Unparseable job experience always passes through regardless of the range (see "Honest filtering" below).
 | `min_match_percent` | `MIN_MATCH_PERCENT` | `0` (no suppression) |
 
 `min_match_percent` hides jobs scoring below the threshold from the Telegram message only — it does **not** affect whether they're written to the Results sheet or marked `Notified`; suppressed jobs are still marked notified (via the full, unfiltered job list in `Format Telegram`'s `jobIds`) so they're never re-scored on a later run. Only applies when Gemini scoring succeeded — the plain-fallback format (LLM failed) never suppresses, since there's no score to filter on. **Also implemented in `n8n_company_search_v1.json`** (both its Telegram message and Gmail digest — Gmail additionally notes how many roles were hidden, since it has more room than Telegram's char limit) — the two workflows' Settings-tab handling stays in sync per `plan.md`'s "duplicated logic" decision.
+
+`notify_email` is Settings-only (no env var) and only used by the **Company Search** workflow: the recipient(s) of its email digest, comma-separated allowed. `Format Email` reads it and, if none are valid (blank / key missing / malformed), logs why and returns nothing so `Send Gmail` never runs — the Telegram results were already sent and are unaffected. Previously the address was hardcoded in `Send Gmail`'s `To` field; that field is now `={{ $json.sendTo }}` and an import/update drops any address typed there, so users upgrading must add the Settings row (a Settings tab from the current `bootstrap.gs` already has it, blank). The main workflow sends no email.
 
 Sheet Document ID: `YOUR_GOOGLE_SHEET_DOCUMENT_ID` (find yours in the Google Sheets URL after `/d/`)
 
@@ -252,6 +255,20 @@ If a user asks you to change what job titles get filtered (e.g. "also exclude 's
 - **Bucket keyword templates** (what search terms define "SDE II" vs "Level 3" vs generic): node `Build Search URLs` in the main workflow, `Build Search URL` in company search.
 
 **When editing either:** you must edit the same regex/keyword string in **both** `n8n_job_search_v1.json` and `n8n_company_search_v1.json` — this logic is intentionally duplicated between the two workflows (see "Duplicated logic" in `plan.md`'s locked-in decisions), not shared via a sub-workflow. Editing only one file will make the two workflows silently disagree on what counts as a match. After editing, validate both files with `node -e "JSON.parse(require('fs').readFileSync('<file>'))"` before considering the change done.
+
+### Editing workflow JSON — agent checklist
+
+Every "validated" check used earlier in this project (`JSON.parse`, `node --check`) is blind to structural mistakes, and one shipped anyway: `Read Settings` and `Send Gmail` in `n8n_company_search_v1.json` shared a node `id`, so n8n's editor opened the wrong node (fixed in PR #32). When you add, duplicate or edit nodes in any `n8n_*.json`:
+
+- **Node `id`s must be unique within the file, and so must node `name`s** (connections reference nodes by *name*). Never copy an id from another node — grep the file for an unused one.
+- **Every connection endpoint must match an existing node name.**
+- Edit as **text** and keep the file's CRLF endings — re-serializing with `JSON.stringify` reformats the whole file and buries the real diff.
+- Keep the sanitized placeholders (`YOUR_GOOGLE_SHEET_DOCUMENT_ID`, `CONFIGURE_ME`); never commit a live n8n export as-is.
+- Test data layouts produced by `bootstrap.gs` by simulating n8n's read (row 1 = column names), not just the parser that builds them.
+- After editing, run:
+```bash
+node -e "for (const f of ['n8n_job_search_v1.json','n8n_company_search_v1.json','n8n_job_parser_v1.json']) { const wf=JSON.parse(require('fs').readFileSync(f,'utf8')); const ids=wf.nodes.map(n=>n.id), names=wf.nodes.map(n=>n.name), nm=new Set(names); const dangling=Object.entries(wf.connections).flatMap(([s,c])=>[s,...(c.main||[]).flat().map(o=>o.node)]).filter(x=>!nm.has(x)); console.log(f,'| unique ids:',new Set(ids).size===ids.length,'| unique names:',nm.size===names.length,'| dangling connections:',dangling.length); }"
+```
 
 ## Design Principles
 - Config-driven: Companies and buckets read from Google Sheet, not hardcoded
@@ -422,10 +439,11 @@ A separate, stateless workflow (`n8n_company_search_v1.json`) for searching a sp
 | Negative title filters | Same | Same (staff, QA, devops, etc.; senior for buckets 1 & 2) |
 | Experience filter | Same (Settings tab / env var, range-overlap match) | Same |
 | Location/match-threshold Settings | Same (Settings tab / env var) | Same |
+| Email recipient | n/a (sends no email) | Settings tab `notify_email` (Settings-only; blank → email skipped) |
 | Sheet writes | Appends to Results | None (stateless) |
 | Notification tracking | Marks Notified=TRUE | None |
 | LLM matching | Gemini Flash resume matching (match % in Telegram, Score in sheet) | Gemini Flash resume matching (match %, summary, gaps) + Gmail |
-| Email notification | None | Gmail with detailed match analysis (when LLM succeeds) |
+| Email notification | None | Gmail digest with detailed match analysis, to the Settings tab's `notify_email` (only when the LLM succeeded **and** `notify_email` is set) |
 
 ### Architecture
 ```
@@ -457,7 +475,7 @@ Telegram Trigger (/search)
 | 1 | Telegram Trigger | telegramTrigger | Listens for `/search` commands |
 | 2 | Parse Search Command | code | Extracts company name + days (default 7, clamped 1-90) |
 | 3 | Read Config | googleSheets | Reads Config tab (same sheet as main workflow) |
-| 4 | Read Settings | googleSheets | Reads Settings tab (location/experience-range/match-threshold), same pattern as main workflow |
+| 4 | Read Settings | googleSheets | Reads Settings tab (location/experience-range/match-threshold, plus `notify_email`), same pattern as main workflow |
 | 5 | Store Settings | code | Parses Settings rows into `staticData.settings` |
 | 6 | Lookup Company | code | Case-insensitive partial match against **all** companies in Config — `Active` is not checked (see Key Differences above) |
 | 7 | Company Found? | if | Routes found/not-found |
@@ -484,8 +502,8 @@ Telegram Trigger (/search)
 | 28 | Call Gemini Flash | httpRequest | POST to Gemini 2.5 Flash API (60s timeout, continueOnFail) |
 | 29 | Parse LLM Response | code | Validates & merges match scores into jobs, sorts by match % |
 | 30 | LLM Succeeded? | if | Routes: LLM worked → email, LLM failed → end |
-| 31 | Format Email | code | Builds detailed email with summary, matches, gaps per job; also applies `min_match_percent` |
-| 32 | Send Gmail | gmail | Sends detailed results email |
+| 31 | Format Email | code | Builds detailed email with summary, matches, gaps per job; also applies `min_match_percent`; reads `notify_email` and returns nothing (skipping Send Gmail) if none valid, else passes `sendTo` downstream |
+| 32 | Send Gmail | gmail | Sends detailed results email to `sendTo` from Format Email (= Settings tab `notify_email`); `To` is an expression, not a hardcoded address |
 
 ### Telegram Message Formats
 
@@ -549,6 +567,8 @@ New "Resume" tab in the same Google Sheet — two-column Key/Value layout:
 | education | Your degree, institution, year |
 | highlights | Key achievement 1, Key achievement 2, ... |
 
+**Row 1 must be the literal `Key` / `Value` header** — n8n's Google Sheets node treats row 1 as column names. `bootstrap.gs` writes it on both paths (placeholder CSV, and `RESUME_JSON`); the `RESUME_JSON` path did **not** until PR #30 — it wrote the first pair (`name` + the user's name) into row 1, so n8n read those as the headers and every read saw no Key/Value columns even though the tab looked fully populated (`Prepare LLM Input` then skipped matching). `Prepare LLM Input` needs at least one non-blank value (it no longer requires a `name` row) and matches `Key`/`Value` case-insensitively. When it skips, its output says why: `resume_missing_key_column` (with `columnsSeen` = what n8n read as headers; your own data appearing there means the header row is missing), `resume_all_values_blank`, or `no_jobs`. `Read Resume` has Always Output Data on, so an empty tab degrades to the plain format instead of silently stopping the run. See `TROUBLESHOOTING.md`.
+
 ### LLM Matching (Gemini Flash)
 
 - API: `POST generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`
@@ -567,7 +587,7 @@ New "Resume" tab in the same Google Sheet — two-column Key/Value layout:
 3. Connect Google Sheets credential (same as main workflow) — **and repoint the Document field** on all 3 Sheets nodes (`Read Config`, `Read Settings`, `Read Resume`) from the placeholder `YOUR_GOOGLE_SHEET_DOCUMENT_ID` to the user's real Sheet; attaching the credential alone doesn't do this
 4. **Resume tab:** Create a "Resume" tab in the Google Sheet with Key/Value columns (referenced by name, not GID), populate with your profile
 5. **Gemini API key:** Get a free key from https://aistudio.google.com/apikey, add `GEMINI_API_KEY` to Docker compose environment, restart
-6. **Gmail:** Create Gmail OAuth2 credential in n8n (enable Gmail API + `gmail.send` scope in GCP console), update `sendTo` email in Send Gmail node
+6. **Gmail:** Create Gmail OAuth2 credential in n8n (enable Gmail API + `gmail.send` scope in GCP console) and attach it to `Send Gmail`. Then put the recipient in the **Settings tab**, not the node: row `notify_email` (comma-separated OK). `Send Gmail`'s `To` is `={{ $json.sendTo }}`, so nothing is typed into it. Blank/invalid → email skipped, Telegram still works. If the user's Settings tab predates this key, they add the row by hand (Key in A, Value in B; row 1 stays `Key`/`Value`)
 7. Activate the workflow (requires HTTPS for Telegram webhook, so cloud only — its sole trigger is the Telegram Trigger, which is **not** shipped disabled here, unlike the main workflow's; activating is what registers the webhook, there is nothing to enable)
 
 **Telegram bot setup:** Each workflow needs its own Telegram bot. The `/jobs` workflow uses one bot, the `/search` workflow uses another. Both bots can message the same chat (same `chatId`).

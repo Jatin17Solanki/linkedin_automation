@@ -103,6 +103,26 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Already running an older workflow copy?** Fixing the sheet (above) is enough for the header-row cause. For the other causes, don't re-import the workflow (that resets your Google Sheets node selections — next entry); paste the updated code straight into the one node: open `Prepare LLM Input` → replace its code with the version from the current `n8n_job_search_v1.json` / `n8n_company_search_v1.json`.
 
+## Company Search answers on Telegram but no email arrives
+
+**Symptom:** `/search Oracle 30` returns the Telegram message but no email digest, and nothing shows as an error.
+
+**Root cause (most likely):** the recipient comes from the Settings tab's `notify_email` row, read by `Format Email`. If that row is blank, missing (a Settings tab created before this key existed doesn't have the row), or isn't a valid address, the email step is deliberately **skipped** — Telegram results are unaffected — and `Format Email`'s execution output/log says so: *"No valid notify_email in the Settings tab -- skipping the email digest"*, or lists the invalid address it ignored.
+
+**Fix:** in the Settings tab add/fill the row — Key `notify_email`, Value your address (comma-separated for several). No restart or re-import; it applies on the next `/search`.
+
+**Other reasons no email arrives:** the LLM step failed (the email is only sent when matching succeeded — Telegram will show "AI matching unavailable"; see the entry above), or the Gmail credential isn't connected / `gmail.send` wasn't approved (then `Send Gmail` itself shows an error).
+
+**Upgrading from a version where you typed the address into the `Send Gmail` node?** That value is no longer used — the node's **To** is now `{{ $json.sendTo }}`, and re-importing/updating the workflow replaces whatever you typed there. Add the Settings row.
+
+## Clicking one node in the editor opens a different node
+
+**Symptom:** e.g. clicking `Read Settings` in the company-search workflow opens `Send Gmail`; credentials or edits seem to land on the wrong node.
+
+**Root cause:** two nodes in the workflow JSON had the same `id`, and n8n's editor resolves nodes by id. It existed in `n8n_company_search_v1.json` until PR #32 (`Read Settings` and `Send Gmail` shared an id). The file was valid JSON, so `JSON.parse`-style checks never flagged it.
+
+**Fix:** use a version with the fix. An already-imported workflow keeps the duplicate ids in n8n's database (auto-import only runs on first start), so delete that workflow in n8n and re-import the fixed JSON (⋯ → Import from File / URL) — ideally before you wire credentials, since a re-import resets them. Or update it through `deploy/import-workflow.sh` (a PUT replaces the nodes). To check any workflow file yourself, use the snippet in `CLAUDE.md` → "Editing workflow JSON — agent checklist".
+
 ## Re-importing a workflow resets your Google Sheets node selections
 
 **Symptom:** After using **⋯ → Import from File** to pick up an updated `n8n_job_search_v1.json` (e.g. a new release, or a node you edited by hand), most Google Sheets nodes' **Document** field reverts to the placeholder, and re-selecting your Sheet also blanks out the **Sheet** field, requiring you to set both by hand again.
