@@ -90,10 +90,10 @@ function bootstrap() {
 
 /**
  * Populates the Resume tab from a JSON string (the README prompt's output)
- * instead of the placeholder CSV. Writes exactly RESUME_KEYS.length rows in
- * RESUME_KEYS order regardless of what's in the JSON, so the sheet's shape
- * always matches what the workflow expects: known keys get their parsed
- * value, missing keys get an empty string, and any keys in the JSON that
+ * instead of the placeholder CSV. Writes a Key/Value header row, then exactly
+ * RESUME_KEYS.length rows in RESUME_KEYS order regardless of what's in the
+ * JSON, so the sheet's shape always matches what the workflow expects: known
+ * keys get their parsed value, missing keys get an empty string, and any keys in the JSON that
  * aren't in RESUME_KEYS are logged and dropped rather than silently kept
  * (they'd just be inert extra data the workflow never reads).
  */
@@ -122,7 +122,14 @@ function populateResumeFromJson_(sheet, jsonString) {
     Logger.log('RESUME_JSON had unexpected keys (ignored, not written to the sheet): %s', extra.join(', '));
   }
 
-  sheet.getRange(1, 1, rows.length, 2).setValues(rows);
+  // Row 1 MUST be the literal Key/Value header: n8n's Google Sheets node treats
+  // row 1 as column names, so writing data straight into row 1 makes the first
+  // pair (`name` + your name) become the headers and every workflow read sees no
+  // Key/Value columns -- `Prepare LLM Input` then reports resume_empty even though
+  // every row is filled in. (The CSV path below gets this right because the
+  // template CSVs already start with a Key,Value row.)
+  var values = [['Key', 'Value']].concat(rows);
+  sheet.getRange(1, 1, values.length, 2).setValues(values);
 }
 
 /**

@@ -564,11 +564,11 @@ New "Resume" tab in the same Google Sheet — two-column Key/Value layout:
 ### Setup
 1. Import `n8n_company_search_v1.json` into n8n (separate workflow from the main one)
 2. **Telegram bot:** Create a **separate** bot via @BotFather (Telegram only supports one webhook per bot). Create a new Telegram Bot credential in n8n for this workflow.
-3. Connect Google Sheets credential (same as main workflow)
+3. Connect Google Sheets credential (same as main workflow) — **and repoint the Document field** on all 3 Sheets nodes (`Read Config`, `Read Settings`, `Read Resume`) from the placeholder `YOUR_GOOGLE_SHEET_DOCUMENT_ID` to the user's real Sheet; attaching the credential alone doesn't do this
 4. **Resume tab:** Create a "Resume" tab in the Google Sheet with Key/Value columns (referenced by name, not GID), populate with your profile
 5. **Gemini API key:** Get a free key from https://aistudio.google.com/apikey, add `GEMINI_API_KEY` to Docker compose environment, restart
 6. **Gmail:** Create Gmail OAuth2 credential in n8n (enable Gmail API + `gmail.send` scope in GCP console), update `sendTo` email in Send Gmail node
-7. Activate the workflow (requires HTTPS for Telegram webhook)
+7. Activate the workflow (requires HTTPS for Telegram webhook, so cloud only — its sole trigger is the Telegram Trigger, which is **not** shipped disabled here, unlike the main workflow's; activating is what registers the webhook, there is nothing to enable)
 
 **Telegram bot setup:** Each workflow needs its own Telegram bot. The `/jobs` workflow uses one bot, the `/search` workflow uses another. Both bots can message the same chat (same `chatId`).
 

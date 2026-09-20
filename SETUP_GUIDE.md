@@ -278,7 +278,9 @@ The 4 search buckets (title patterns + which companies use "senior" for mid-leve
 
 On-demand lookup for one specific company (`/search Oracle 30`), with a detailed email report on top of the Telegram reply. **Completely independent of the main workflow above** — has its own Telegram bot, doesn't touch the Results sheet, doesn't affect the main workflow's dedup or schedule. Skip this whole section if you only want scheduled automatic searches.
 
-**Steps 1–5 below work locally right now. Step 6 (activating it) needs HTTPS, so it only actually runs once you've done Part 2 or Part 3 (cloud deployment)** — Company Search's *only* trigger is a Telegram webhook, unlike the main workflow which also offers a Manual/local Webhook trigger for testing. Do steps 1–5 now if you're setting up locally first; just know `/search` itself won't respond until you're on a cloud VM.
+**Where to do this:** Company Search's *only* trigger is a Telegram webhook, which needs HTTPS — so unlike the main workflow (which also has a Manual/local Webhook trigger for testing), **`/search` only actually responds on a cloud VM** ([Part 2](#part-2-production-deployment-gcp-e2-micro) / [Part 3](#part-3-production-deployment-aws-ec2)).
+- **Already deployed to the cloud?** Do steps 1–7 below in order, in your **cloud** n8n (`https://<VM_IP>.nip.io`) — that's the instance where this workflow will run. (Credentials live per-n8n-instance, so a bot/Gmail credential you set up in a local n8n doesn't carry over to the VM.)
+- **Setting up locally first?** Steps 1–5 and the credential/Sheet wiring in step 6 work locally right now; activating it and testing (step 6's last paragraph, and step 7) only work once you're on a cloud VM.
 
 ### 1 — Confirm the workflow is present
 
@@ -301,15 +303,20 @@ No new OAuth setup needed — Company Search reads the **same** Google Sheet (Co
 1. In the same Google Cloud project you used for the Sheets OAuth Client (Part 1, Step 3) — **APIs & Services → Library** → search "Gmail API" → **Enable**
 2. **APIs & Services → Credentials → Create Credentials → OAuth Client ID** (or reuse the existing one — the **gmail.send** scope will be requested on first sign-in either way)
 3. In n8n: **Credentials → Add Credential → Gmail OAuth2** → connect using that Client ID/Secret → sign in, approve the `gmail.send` scope
-4. Open the **Send Gmail** node in the workflow → set **To** to your own email address (this is hardcoded per-node, not an env var — same pattern as Part 1's `sendTo`-style fields)
+4. Open the **Send Gmail** node in the workflow → set **To** to your own email address. It ships as `CONFIGURE_ME@example.com` and is set per-node (not an env var), so nothing will be sent to you until you change it.
 
-### 6 — Connect credentials to nodes, then activate (cloud only)
+### 6 — Connect credentials, point the Sheets nodes at your Sheet, then activate
 
-**Google Sheets credential** → `Read Config`, `Read Settings`, `Read Resume`
-**Telegram credential** (the new bot from step 2) → `Send Error Telegram`, `Send No Results Telegram`, `Send Results Telegram`, `Telegram Trigger`
-**Gmail credential** → `Send Gmail`
+Open the `LinkedIn Company Search V1` workflow and, for each node with a ⚠️:
 
-Once you're on a cloud VM (Part 2/3): open the workflow → **enable** the `Telegram Trigger` node (right-click → Enable, it ships disabled like the main workflow's) → toggle **Active**. n8n registers the webhook with Telegram automatically.
+**Credentials:**
+- **Google Sheets credential** (the existing one from Part 1) → `Read Config`, `Read Settings`, `Read Resume`
+- **Telegram credential** (the *new* bot from step 2) → `Send Error Telegram`, `Send No Results Telegram`, `Send Results Telegram`, `Telegram Trigger`
+- **Gmail credential** → `Send Gmail`
+
+**Then point the 3 Sheets nodes at your actual Sheet — attaching a credential alone isn't enough.** `Read Config`, `Read Settings` and `Read Resume` all still point at the placeholder `YOUR_GOOGLE_SHEET_DOCUMENT_ID`. For each: double-click → **Document** → **From list** → pick your Sheet → close. (Same as Part 1, Step 5 — there's no bulk option, so it's 3 nodes individually.)
+
+**Activate (cloud only):** toggle **Active** (top-right). Unlike the main workflow, the `Telegram Trigger` here is **not** shipped disabled — there's nothing to enable; activating the workflow is what makes n8n register the webhook with Telegram.
 
 ### 7 — Test
 
@@ -511,6 +518,13 @@ You should get job listings or "no new openings found."
 1. In n8n: **Settings** (bottom-left) → **API**
 2. Click **Create an API Key**
 3. Copy it — you'll need it in Step 4
+
+### 3.6 — Optional: turn on the other two workflows
+
+Everything above set up the **main** Job Search workflow. This project ships two more, already imported into your n8n but inactive until you connect them:
+
+- **Company Search** (`/search Oracle 30` — on-demand lookup of one company, with an email report): needs a **second Telegram bot** and a Gmail credential, and — because its only trigger is a Telegram webhook — **can only run on this cloud VM**, not locally. Full steps: [Part 1B](#part-1b-company-search-setup-search--optional). Do them here, in this n8n instance.
+- **Job Parser + MCP server** (lets Claude.ai parse LinkedIn job URLs): no credentials needed. Full steps: [Part 1C](#part-1c-job-parser--mcp-server-setup-optional). Point `MCP_WEBHOOK_URL` at `https://<VM_IP>.nip.io/webhook/parse-job`.
 
 ---
 
@@ -732,6 +746,8 @@ Open `https://<YOUR_VM_IP>.nip.io` in your browser. You should see the n8n login
 ## Step 3: Configure n8n on the VM
 
 Identical to [Part 2, Step 3](#step-3-configure-n8n-on-the-vm) — Google Sheets/Telegram credential setup, connecting credentials to nodes, enabling the Telegram Trigger, and generating an API key all work exactly the same regardless of which cloud n8n runs on. The only value that differs is the redirect URI n8n shows for the Google Sheets OAuth2 credential, which will use your AWS VM's IP: `https://<VM_IP>.nip.io/rest/oauth2-credential/callback`.
+
+**Also on this VM — the other two workflows** (already imported, inactive until you connect them): [Part 2, Step 3.6](#36--optional-turn-on-the-other-two-workflows) explains them. **Company Search** (`/search`) in particular can *only* run on a cloud VM like this one, so this is where you set it up — follow [Part 1B](#part-1b-company-search-setup-search--optional) in this n8n instance.
 
 ---
 
