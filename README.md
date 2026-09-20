@@ -193,12 +193,20 @@ Dockerfile, docker/         # image that auto-loads the 3 workflows on first sta
 deploy/                     # one-shot setup scripts for AWS/GCP, Docker Compose, Caddy (HTTPS)
 SETUP_GUIDE.md              # the walkthrough
 TROUBLESHOOTING.md          # known problems and fixes
+CONTRIBUTING.md             # how to contribute (and the rules that matter)
+BACKLOG.md                  # what's planned, what's unverified, what will rot first
 CLAUDE.md                   # technical reference, written for AI coding assistants
+scripts/check-secrets.js    # run before committing: catches leaked tokens and real ids
+LICENSE                     # MIT
 ```
+
+## Contributing
+
+Issues and pull requests are welcome — [`CONTRIBUTING.md`](CONTRIBUTING.md) has the few rules that matter (chiefly: never commit real personal data), and [`BACKLOG.md`](BACKLOG.md) lists what's planned and what's still unverified.
 
 ## License
 
-MIT.
+[MIT](LICENSE). That covers the files in this repository; [n8n](https://n8n.io), which the workflows run on, is licensed separately by its authors.
 
 ---
 
