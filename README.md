@@ -18,7 +18,7 @@ It's built with [n8n](https://n8n.io) (a visual workflow tool), Google Sheets (w
 
 ### 1. A scheduled job digest — from Bot #1
 
-By default it runs **eight times a day** — and you can change that to whatever times suit you ([how](SETUP_GUIDE.md#55-schedule-and-time-window)). Each run sends **one message to your Telegram chat** listing everything new, best match first. Bot #1 posts to the chat ID you configure, and that same chat is where you message it commands such as `/jobs 6`. 🟢 is a strong match, 🟡 a decent one, 🔴 a long shot.
+By default it runs **eight times a day** — and you can change that to whatever times suit you ([how](SETUP_GUIDE.md#55-schedule-and-time-window)). Each run sends **one message to your Telegram chat** listing everything new, best match first. Bot #1 posts to the chat ID you configure, and that same chat is where you message it commands such as `/jobs 6` (the number is **hours**: "search the last 6 hours now"). 🟢 is a strong match, 🟡 a decent one, 🔴 a long shot.
 
 ```
 🔔 3 New Openings Found
@@ -42,7 +42,7 @@ By default it runs **eight times a day** — and you can change that to whatever
 
 ### 2. An on-demand company lookup — from Bot #2 (recommended)
 
-Curious about one company right now? Message the second bot:
+Curious about one company right now? Message the second bot — the number at the end is **days** (default 7, anywhere from 1 to 90):
 
 ```
 /search Oracle 30
@@ -81,8 +81,17 @@ Telegram sends a bot's incoming commands to exactly one place. The scheduled dig
 | | Bot #1 | Bot #2 |
 |---|---|---|
 | **Workflow** | Job Search | Company Search |
-| **Does** | Sends the digests; on a cloud VM also answers `/jobs 6` | Answers `/search Oracle 30` |
+| **Does** | Sends the digests; on a cloud VM also answers `/jobs 6` (last 6 **hours**) | Answers `/search Oracle 30` (last 30 **days**) |
 | **Needed?** | Yes | **Recommended** (you can add it later) |
+
+**The two commands, side by side.** They take different units:
+
+| Command | The number is… | Example | If you leave it out | Allowed |
+|---|---|---|---|---|
+| `/jobs N` — Bot #1 | **hours** | `/jobs 6` → the last 6 hours | 12 hours | any whole number |
+| `/search Company N` — Bot #2 | **days** | `/search Oracle 30` → the last 30 days | 7 days | 1 to 90 |
+
+Type just the number: `/jobs 6h` and `/search Oracle 30d` don't work. As a rule of thumb, **hours** answer "what's new since I last checked?" and **days** answer "what has this company posted lately?".
 
 Creating a bot takes a minute — the [setup guide](SETUP_GUIDE.md#12-telegram-bots) walks through it.
 

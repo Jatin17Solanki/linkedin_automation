@@ -79,8 +79,8 @@ VM public IP:                     (cloud)
 
 | Bot | Used by | Needed? | What it does |
 |-----|---------|---------|--------------|
-| **Bot #1** | **Job Search** workflow | **Yes** | Sends you the scheduled job digests. On a cloud VM it also answers `/jobs 6` ("search the last 6 hours now") |
-| **Bot #2** | **Company Search** workflow | **Recommended** | Answers `/search Oracle 30` — [4.1](#41-company-search-search) explains why it's worth having |
+| **Bot #1** | **Job Search** workflow | **Yes** | Sends you the scheduled job digests. On a cloud VM it also answers `/jobs 6` — the number is **hours** ("search the last 6 hours now"; plain `/jobs` means 12 hours) |
+| **Bot #2** | **Company Search** workflow | **Recommended** | Answers `/search Oracle 30` — the number is **days** (not hours like `/jobs`). [4.1](#41-company-search-search) explains why it's worth having |
 
 **Why two?** Telegram delivers a bot's incoming messages to exactly one place, and each of these workflows needs to receive its own commands. Two workflows that both listen for commands therefore need two bots. The scheduled digests (the core of the project) need only **one bot**, so you *can* start with Bot #1 and add Bot #2 later — but Company Search is worth having, so we recommend creating both now while you're talking to BotFather.
 
@@ -469,7 +469,7 @@ Because the window is only 24 hours, a first run can easily return **zero jobs**
 
 **Locally:** open the workflow and click **Test workflow** (top right); nodes light up green as they run. Or call the webhook: `http://localhost:5678/webhook/job-search?hours=24` (the workflow must be Active for the webhook URL to work).
 
-**On a VM:** message Bot #1 on Telegram: `/jobs 24` (search the last 24 hours). You'll get job listings, or "no new openings found this run" — either means it's working.
+**On a VM:** message Bot #1 on Telegram: `/jobs 24` (the number is **hours** — search the last 24 hours; plain `/jobs` means 12 hours; digits only, so `/jobs 24h` won't work). You'll get job listings, or "no new openings found this run" — either means it's working.
 
 **To guarantee some results while testing:** open **Build Search URLs**, find `const TIME_WINDOW_SECONDS = staticDataForTime.customTimeWindow || 86400;` and temporarily change `86400` to `2592000` (30 days). **Change it back afterwards** — otherwise every scheduled run keeps using 30 days. (`/jobs N` and the webhook's `?hours=N` set the window for that one run without editing anything.)
 
@@ -487,7 +487,7 @@ The project ships two more workflows. They were imported alongside the main one 
 
 ## 4.1 Company Search (`/search`)
 
-**What it is:** message the second bot `/search Oracle 30` and it looks up that one company's openings from the last 30 days (default 7; anything from 1–90), replies on Telegram with match scores, and — if configured — emails a detailed report with a summary and skill gaps per job. It's on-demand and stateless: it doesn't touch the Results tab, doesn't dedupe against the scheduled runs, and works for **any company in your Config tab whether or not it's `Active`**.
+**What it is:** message the second bot `/search Oracle 30` and it looks up that one company's openings from the last 30 days — the number is **days**, unlike `/jobs`, which takes hours (default 7, allowed 1–90, digits only so no `d`) — replies on Telegram with match scores, and — if configured — emails a detailed report with a summary and skill gaps per job. It's on-demand and stateless: it doesn't touch the Results tab, doesn't dedupe against the scheduled runs, and works for **any company in your Config tab whether or not it's `Active`**.
 
 **Why it's worth having:** it answers "what's open at X right now?" without waiting for the next digest; a company you set to `Active = FALSE` is left out of the scheduled digest but stays searchable here, so you can keep a long Config list and push only your priorities to your phone; and the email report explains *why* each role matches and where the gaps are.
 
@@ -686,10 +686,10 @@ The times are read in the timezone set by `GENERIC_TIMEZONE` (and `TZ`) in the c
 | How you run it | Window |
 |---|---|
 | Scheduled / **Test workflow** | 24 hours (the default) |
-| Message the bot `/jobs 6` (cloud) | 6 hours — any number you like, for that run only |
-| Webhook `…/webhook/job-search?hours=6` | 6 hours, for that run only |
+| Message Bot #1 `/jobs 6` (cloud) | 6 **hours**, for that run only — any whole number; plain `/jobs` = 12 hours |
+| Webhook `…/webhook/job-search?hours=6` | 6 hours, for that run only (12 if you leave `hours` out) |
 
-To change the *default* 24 hours, edit `86400` (seconds) in **Build Search URLs** — `const TIME_WINDOW_SECONDS = staticDataForTime.customTimeWindow || 86400;` — e.g. `43200` = 12 h. (Company Search takes days: `/search Oracle 30`.)
+To change the *default* 24 hours, edit `86400` (seconds) in **Build Search URLs** — `const TIME_WINDOW_SECONDS = staticDataForTime.customTimeWindow || 86400;` — e.g. `43200` = 12 h. (Company Search is different: it takes **days**, e.g. `/search Oracle 30`.)
 
 ## 5.6 Environment variable reference
 
