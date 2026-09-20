@@ -55,7 +55,7 @@ n8n workflows that automatically search LinkedIn for job openings at target comp
      | Settings | Key, Value (location/experience/match-threshold overrides, plus `notify_email` for Company Search's email digest) | [`settings_template.csv`](examples/google-sheet/settings_template.csv) — edit anytime, no restart needed; blank a value to fall back to its env var |
      | Resume | Key, Value (your profile as key-value pairs) | [`resume_template.csv`](examples/google-sheet/resume_template.csv) |
 
-   **Filling in the Resume tab from your actual resume:** typing 12 key/value rows by hand is tedious and easy to get wrong. Instead, give the prompt below (with your resume attached or pasted) to any LLM — it's not tied to a specific model or tool — and it'll return JSON you can paste directly into `bootstrap.gs`'s `RESUME_JSON` variable (see the comment near the top of that file) before running it, which populates the Resume tab for you in the exact shape the workflow expects. Skip this and use the placeholder values from `resume_template.csv` if you'd rather fill it in by hand.
+   **Filling in the Resume tab from your actual resume:** typing 12 key/value rows by hand is tedious and easy to get wrong. Instead, give the prompt below (with your resume attached or pasted) to any LLM — it's not tied to a specific model or tool — and it'll return JSON in a single code block — click the block's copy button and paste it **between the two backticks** on the `var RESUME_JSON` line of `bootstrap.gs` (keep those backticks, and don't paste the opening/closing fence lines) before running it, which populates the Resume tab for you in the exact shape the workflow expects. Skip this and use the placeholder values from `resume_template.csv` if you'd rather fill it in by hand.
 
    <details>
    <summary>Resume → Sheet prompt (click to expand)</summary>
@@ -67,7 +67,10 @@ n8n workflows that automatically search LinkedIn for job openings at target comp
    skills_other, experience_summary, education, highlights.
 
    Rules:
-   - Output ONLY the JSON object. No markdown fences, no commentary before or after.
+   - Reply with the JSON object inside ONE code block (start the block with
+     ```json and end it with ```) so it can be copied with one click, and
+     write nothing outside that block.
+   - Do not put backtick characters or the two characters ${ inside any value.
    - All values are strings, except years_experience (a number, e.g. 3.5).
    - target_roles, skills_languages, skills_frameworks, skills_databases,
      skills_cloud, skills_other: comma-separated strings, not arrays.
@@ -144,7 +147,7 @@ sudo bash deploy/setup-gcp.sh   # or deploy/setup-aws.sh on AWS EC2
 
 See `SETUP_GUIDE.md` Part 2 (GCP) or Part 3 (AWS) for the full VM provisioning walkthrough. Both scripts prompt interactively for your Gemini API key and Telegram chat ID — have them ready (see each Part's "Before You Start"). Cost-wise: GCP's e2-micro can be free indefinitely, but only if you upgrade the account out of its 90-day Free Trial; AWS's free tier is 12 months, full stop — see each Part's cost note before you commit to one.
 
-GitHub Actions auto-deploys all 3 workflow JSONs on push to main.
+Optional: if you maintain your own fork and edit the workflow JSONs, a manually-triggered GitHub Action (`deploy.yml`) can push them to your VM — see `SETUP_GUIDE.md` Step 4. Regular users can ignore it. Separately, every push to `main` that touches the Dockerfile or a workflow JSON rebuilds and publishes the Docker image to GHCR automatically.
 
 ## MCP Server
 

@@ -302,7 +302,7 @@ Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Doc
 | `deploy/setup-gcp.sh` | One-time GCP VM setup — GCP IP autodetection + the shared logic above |
 | `deploy/setup-aws.sh` | One-time AWS EC2 VM setup — EC2 IMDSv2 IP autodetection + the shared logic above |
 | `deploy/import-workflow.sh` | Import/update workflow via n8n REST API; matches the target workflow by its `name` field (not a hardcoded substring), so the same script works for all 3 workflow JSONs |
-| `.github/workflows/deploy.yml` | CI/CD — auto-deploy all 3 workflow JSONs on push to main (secrets are still named `GCP_*` for historical reasons, but the target VM can be on either cloud — see SETUP_GUIDE.md's AWS Step 4) |
+| `.github/workflows/deploy.yml` | CI/CD — OPTIONAL, manual-only (`workflow_dispatch`): pushes all 3 workflow JSONs to a VM; only useful to fork maintainers (secrets are still named `GCP_*` for historical reasons, but the target VM can be on either cloud — see SETUP_GUIDE.md's AWS Step 4) |
 | `.github/workflows/docker-publish.yml` | CI/CD — builds and publishes the Docker image to GHCR on push to main / version tags |
 
 ### Before either VM setup: gather these first
@@ -355,7 +355,7 @@ sudo sysctl -p
 This adds a 2GB swapfile on the persistent disk (free tier) and sets swappiness=10 so the kernel only swaps under real memory pressure. Combined with the `mem_limit`/`memswap_limit` (defaults `600m`/`800m`, overridable via `N8N_MEM_LIMIT`/`N8N_MEMSWAP_LIMIT` in `deploy/.env`) on the n8n container in `docker-compose.prod.yml`, this ensures a bad workflow run degrades gracefully (container OOM-kills and restarts) rather than freezing the whole VM.
 
 ### GitHub Actions CI/CD
-Auto-deploys all 3 workflow JSONs when any of them is pushed to `main` (`import-workflow.sh` matches each by its own `name` field, so this is a single loop, not per-file special-casing).
+Optional and **manual-only** (Actions tab → Run workflow; it used to fire on every push to `main` and failed for anyone without the VM secrets). Deploys all 3 workflow JSONs (`import-workflow.sh` matches each by its own `name` field, so this is a single loop, not per-file special-casing).
 
 **Required GitHub Secrets** (names are `GCP_*` for historical reasons — set them the same way regardless of which cloud actually hosts the VM, AWS included):
 | Secret | Value |

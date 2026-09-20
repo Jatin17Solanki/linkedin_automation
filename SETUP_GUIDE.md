@@ -514,7 +514,9 @@ Send your Telegram bot: `/jobs 24`
 
 You should get job listings or "no new openings found."
 
-### 3.5 — Generate an API key (for CI/CD)
+### 3.5 — Optional: generate an API key (only for Step 4, CI/CD)
+
+Skip this unless you plan to do [Step 4](#step-4-optional-set-up-github-actions-cicd).
 
 1. In n8n: **Settings** (bottom-left) → **API**
 2. Click **Create an API Key**
@@ -529,9 +531,11 @@ Everything above set up the **main** Job Search workflow. This project ships two
 
 ---
 
-## Step 4: Set Up GitHub Actions CI/CD
+## Step 4 (Optional): Set Up GitHub Actions CI/CD
 
-This auto-deploys workflow changes when you push to `main`.
+**You can skip this whole step.** It only matters if you keep your own fork and edit the workflow JSON files in this repo: it lets you push those edited files from GitHub to your running n8n with one click, instead of re-importing them by hand. If you just want to run the project as shipped, your n8n already has the workflows (the Docker image imports them on first start) and nothing here is needed.
+
+What it does: `.github/workflows/deploy.yml` copies the 3 workflow JSONs to your VM over SSH and imports them through the n8n API. It is **manual-only** (Actions tab → *Deploy Workflow to n8n* → *Run workflow*), so it never runs — or fails — on its own.
 
 ### 4.1 — Generate an SSH key pair
 
@@ -572,10 +576,11 @@ Go to your repo → **Settings** → **Secrets and variables** → **Actions** �
 
 ### 4.4 — Test the pipeline
 
-1. Make any small edit to `n8n_job_search_v1.json`
-2. Commit and push to `main`
-3. Go to repo → **Actions** tab → watch the "Deploy Workflow to n8n" run
-4. Once green, check n8n UI — your change should be reflected
+1. Make any small edit to `n8n_job_search_v1.json` and push it to `main`
+2. Go to repo → **Actions** tab → **Deploy Workflow to n8n** → **Run workflow**
+3. Once green, check n8n UI — your change should be reflected
+
+Note: importing replaces the workflow definition on your instance, so re-check that credentials and the Google Sheet are still selected on each Sheets/Telegram node afterwards.
 
 ---
 
@@ -752,9 +757,9 @@ Identical to [Part 2, Step 3](#step-3-configure-n8n-on-the-vm) — Google Sheets
 
 ---
 
-## Step 4: Set Up GitHub Actions CI/CD
+## Step 4 (Optional): Set Up GitHub Actions CI/CD
 
-Same flow as [Part 2, Step 4](#step-4-set-up-github-actions-cicd) — generate an SSH key pair, add the public half to the VM, add secrets to GitHub, push a change to test it.
+**You can skip this whole step** — it is only for people who edit the workflow JSONs in their own fork (see [Part 2, Step 4](#step-4-optional-set-up-github-actions-cicd) for what it does). Same flow as there — generate an SSH key pair, add the public half to the VM, add secrets to GitHub, run the workflow from the Actions tab to test it.
 
 **One naming gotcha:** `.github/workflows/deploy.yml`'s secrets are still named `GCP_VM_IP`/`GCP_SSH_USER`/`GCP_SSH_PRIVATE_KEY` — that's a legacy name from when this project only supported GCP, not a sign you're doing something wrong. Use those exact secret names in GitHub even though your VM is on AWS; the workflow doesn't care which cloud the IP/user/key actually point at.
 
@@ -775,7 +780,7 @@ Same flow as [Part 2, Step 4](#step-4-set-up-github-actions-cicd) — generate a
    | `GCP_SSH_USER` | `ubuntu` |
    | `N8N_API_KEY` | API key from Step 3's equivalent of Part 2's 3.5 |
 
-4. Test: edit any of the 3 workflow JSONs, commit, push to `main`, watch the **Actions** tab.
+4. Test: edit any of the 3 workflow JSONs, push to `main`, then run **Deploy Workflow to n8n** from the **Actions** tab (it is manual-only) and watch it.
 
 ---
 
