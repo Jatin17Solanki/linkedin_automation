@@ -167,6 +167,20 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Fix:** In the AWS Console, go to your instance → **Security** tab → click the attached Security Group → confirm inbound rules allow TCP 80 and 443 from `0.0.0.0/0` (Anywhere). See `SETUP_GUIDE.md` §2B (Step 1.3) for the full rule table. This is the single most common "it's not working" report for the AWS path and has no GCP equivalent.
 
+## Fewer jobs than expected on a wide time window
+
+**Symptom:** `/jobs 168` or `/search Google 90` returns far fewer openings than LinkedIn shows for the same search.
+
+**Root cause:** each search group is read page by page (10 results per request) up to a cap of **30 pages = 300 results**, to keep a single run bounded. Before 2026-09 the workflows read only one page (about 60 results) and had no way to go further; the cap is now 300, and the run's log prints `WARNING: bucket N reached the 30-page cap` when it is hit.
+
+**Fix:** use a shorter window, or split the busiest group: a bucket with many companies (Bucket 4 in the starter list has 68) fills the cap fastest. The cap is `MAX_PAGES` in the `Filter & Accumulate Links` node (`Filter Links` in Company Search). An instance imported before this change still has the old one-page behavior — see the "fix isn't applying" entry above.
+
+## The job bot answers with usage help instead of searching
+
+**Symptom:** you message Bot #1 and get "Hi! To search LinkedIn right now, send /jobs followed by a number of hours…".
+
+**Root cause:** only `/jobs` and `/jobs <whole number of hours>` start a search (case doesn't matter, and `/jobs@YourBotName 6` works in groups). `/jobs 6h`, `/jobs 1.5`, `/start` and ordinary text are answered with the usage message and do **not** run anything. (Before this reply existed, such messages appear to have started a full run.) The number is **hours**; Company Search's is **days**.
+
 ## Before you go live: check your Google Sheet's sharing settings
 
 The workflows read/write your Config, Results, and Resume tabs via the Google Sheets OAuth2 credential — not a public link — but it's easy to accidentally leave a Sheet shared as "Anyone with the link" from earlier testing or copy-pasting. Your Resume tab in particular contains personal career details. Before activating any workflow against a real Sheet, open its Share settings and confirm it's restricted to your own account (or explicitly trusted collaborators) rather than link-shared.

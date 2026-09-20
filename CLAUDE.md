@@ -15,17 +15,18 @@ This file is both the technical reference and the briefing for an AI assistant h
 An n8n automation workflow (`n8n_job_search_v1.json`) that searches LinkedIn's public job pages for target companies in **Bengaluru**, filters results by experience level, logs to Google Sheets, and sends Telegram notifications. Defaults target mid-level backend/full-stack roles (about 3.5 years' experience) in Bengaluru; location, experience range and companies are all configurable (see below).
 
 ## File Locations
-- **Main workflow:** `n8n_job_search_v1.json` — scheduled job search with LLM resume matching (37 functional nodes + 5 sticky notes)
-- **Company search:** `n8n_company_search_v1.json` — on-demand `/search` command with LLM resume matching (32 functional nodes + 4 sticky notes)
+- **Main workflow:** `n8n_job_search_v1.json` — scheduled job search with LLM resume matching (41 functional nodes + 5 sticky notes)
+- **Company search:** `n8n_company_search_v1.json` — on-demand `/search` command with LLM resume matching (34 functional nodes + 4 sticky notes)
 - **Job parser:** `n8n_job_parser_v1.json` — webhook API for parsing LinkedIn job pages (8 functional nodes + 1 sticky note)
 
 ## Architecture Overview
 
 ```
-Schedule (7AM/7PM, 24h window)
+Schedule (8×/day — 7, 9:30, 11:30, 14, 16, 18, 20, 22 IST; 24h window)
   OR Manual Trigger (24h window)
   OR Webhook Trigger (?hours=N, custom window) ← local dev
   OR Telegram Trigger (/jobs N) ← production (needs HTTPS)
+        → Parse Hours → Is Jobs Command? — anything that is not /jobs [hours] gets a usage reply (Send Usage Telegram) and STOPS; it must not start a run
     ↓
   → Read Config (Google Sheet "Config" tab — list of companies + buckets)
   → Store Config (saves config to workflow static data)
@@ -33,9 +34,10 @@ Schedule (7AM/7PM, 24h window)
   → Build Search URLs (Code node — builds LinkedIn URLs per bucket, Bengaluru location filter)
   → Loop Over URLs
     → Wait Between Searches (rate limit)
-    → Fetch Search Page (HTTP GET to LinkedIn public search)
+    → Fetch Search Page (HTTP GET to LinkedIn's guest search endpoint — one page of 10 per request)
     → Extract Links & Titles (HTML parse)
-    → Filter & Accumulate Links (Code — negative title filter + dedup)
+    → Filter & Accumulate Links (Code — negative title filter + dedup + paging decision)
+    → More Pages? (IF) — yes: Next Page URL → back to Wait Between Searches (max 30 pages / 300 results per bucket); no: next bucket
   → Output New Job Links
   → Loop Over Jobs
     → Wait Between Jobs (rate limit)
@@ -73,17 +75,21 @@ Schedule (7AM/7PM, 24h window)
 
 | Bucket | Title Pattern | Negative "senior" filter? | Companies |
 |--------|--------------|---------------------------|-----------|
-| 1 | SDE II / Software Engineer II | YES — excludes "senior" | Amazon(1586), Flipkart(321062), Expedia(2751), Zeta(10355561), InMobi(272972), Slice(30246063), Groww(10813156), Akamai(3925), Wayfair(19857), Rippling(17988315), Intuit(1666), Microsoft(1035) |
-| 2 | Level 3 / III | YES — excludes "senior" | Oracle(1028), Google(1441), Walmart(9390173), eBay(1481) |
-| 3 | Generic (Large Tech) | NO — allows "senior" (Myntra/PayPal/MMT use "Senior" for mid-level) | Adobe(1480), Salesforce(3185), Myntra(361348), PayPal(1482), MMT(35113), PhonePe(10479149), Apple(162479), Meta(10667), LinkedIn(1337), Netflix(165158), Uber(1815218), Databricks(3477522) |
-| 4 | Generic (Others) | NO — allows "senior" | Atlassian(22688), Nvidia(3608), Airbnb(309694), Confluent(88873), ServiceNow(29352), Workday(17719), Rubrik(4840301), Slack(1612748), Nutanix(735085), OpenTable(12181), Observe.ai(18090845), Acko(13250135), Upstox(15091079), Cred(14485479), SuperMoney(13244834), ClearTax(74474022), Blinkit(80918929), Directi(29570), DeShaw(6508), Kotak(5632), ClearTrip(62902), Swiggy(9252341) |
+| 1 | SDE II / Software Engineer II | YES — excludes "senior" | Akamai(3925), Amazon(1586), Expedia(2751), Flipkart(321062), Groww(10813156), Microsoft(1035), Rippling(17988315), Slice(30246063), Wayfair(19857), Zeta(10355561) |
+| 2 | Level 3 / III | YES — excludes "senior" | eBay(1481), Google(1441), Oracle(1028), Walmart Global Tech India(9390173) |
+| 3 | Generic (Large Tech) | NO — allows "senior" (Myntra/PayPal/MMT use "Senior" for mid-level) | Adobe(1480), Apple(162479), Databricks(3477522), LinkedIn(1337), MakemyTrip(35113), Meta(10667), Myntra(361348), Netflix(165158), PayPal(1482), PhonePe(10479149), Salesforce(3185), Uber(1815218) |
+| 4 | Generic (Others) | NO — allows "senior" | 68 companies in the starter list (Atlassian, Nvidia, Airbnb, Stripe, Swiggy, Cred, …) — see `examples/google-sheet/config_data.csv` |
+
+The table shows the starter Config tab (`examples/google-sheet/config_data.csv`, 94 companies, all `Active=TRUE`); each user edits their own Config tab.
 
 ## LinkedIn URL Construction
 
 Each bucket generates a URL like:
 ```
-https://www.linkedin.com/jobs/search/?keywords=<encoded_boolean_query>&f_C=<company_ids>&f_TPR=r<seconds>&location=India&geoId=102713980&f_PP=105214831&sortBy=DD
+https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=<encoded_boolean_query>&f_C=<company_ids>&f_TPR=r<seconds>&location=India&geoId=102713980&f_PP=105214831&sortBy=DD&start=<n>
 ```
+
+**Why the guest endpoint and paging (measured 2026-09-20):** the public `/jobs/search/` page returns at most 60 cards and cannot be paged by guests (`start=25` gets a login redirect, HTTP 303), so results beyond the newest 60 per bucket were silently never seen. The guest endpoint above returns a bare `<li>` list, **10 cards per request**, and pages with `start=0,10,20,…`; a short page is the last one. The workflows keep requesting pages while a page is full, up to `MAX_PAGES = 30` (300 results) per bucket, logging a `WARNING` if the cap is hit. Paging state (`searchStart`/`searchPages`) lives in static data and is reset by `Build Search URLs` / `Build Search URL` each run. The HTML node's selectors therefore have no `ul.jobs-search__results-list` prefix.
 
 - `f_TPR=r<seconds>` = time window (e.g., `r86400` = 24 hours)
 - `f_C` = comma-separated LinkedIn company IDs
@@ -148,21 +154,21 @@ Sheet Document ID: `YOUR_GOOGLE_SHEET_DOCUMENT_ID` (find yours in the Google She
 
 ## Telegram Notification Format
 
-**Send Telegram node**: Parse Mode should not be configured. The "can't parse entities" 400 error occurs when parse_mode is active and the message contains unescaped Markdown chars. Two mitigations applied in the code: (1) `safe()` helper strips `_` and `*` from dynamic text fields, (2) tags use `(SDE-II)` format instead of `[SDE-II]` — square brackets trigger Markdown link-entity parsing.
+**Send Telegram node**: Parse Mode should not be configured. The "can't parse entities" 400 error occurs when parse_mode is active and the message contains unescaped Markdown chars. Two mitigations applied in the code: (1) `safe()` helper strips `_` and `*` from dynamic text fields, (2) tags use `(SDE-II)` format instead of `(SDE-II)` — square brackets trigger Markdown link-entity parsing.
 
 **When jobs are found (LLM enriched — sorted by match %):**
 ```
 🔔 3 New Openings Found
 
-1. 🟢 82% — SDE II (3-5 yrs) [SDE-II]
+1. 🟢 82% — Amazon — SDE II (3-5 yrs) (SDE-II)
    📍 Bengaluru, India
    🔗 https://linkedin.com/jobs/view/123
 
-2. 🟡 65% — Software Engineer (3+ yrs) [Backend]
+2. 🟡 65% — Myntra — Software Engineer (3+ yrs) (Backend)
    📍 Bengaluru, India
    🔗 https://linkedin.com/jobs/view/456
 
-3. 🔴 38% — Cloud Engineer (5+ yrs) [Generic]
+3. 🔴 38% — Cred — Cloud Engineer (5+ yrs) (Generic)
    📍 Bengaluru, India
    🔗 https://linkedin.com/jobs/view/789
 ```
@@ -172,7 +178,7 @@ Color coding: 🟢 ≥70%, 🟡 50-69%, 🔴 <50%
 ```
 🔔 3 New Openings Found
 
-1. Amazon — SDE II (3-5 yrs) [SDE-II]
+1. Amazon — SDE II (3-5 yrs) (SDE-II)
    📍 Bengaluru, India
    https://linkedin.com/jobs/view/123
 
@@ -186,7 +192,7 @@ Color coding: 🟢 ≥70%, 🟡 50-69%, 🔴 <50%
 
 Messages exceeding Telegram's 4096 char limit are automatically split into multiple messages with `...contd` headers.
 
-## Node Reference (37 functional nodes)
+## Node Reference (41 functional nodes)
 
 | # | Node Name | Type | Purpose |
 |---|-----------|------|---------|
@@ -227,6 +233,10 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 | 35 | Mark Jobs Notified | code | Collects job IDs + scores to mark as notified |
 | 36 | Update Notified Status | googleSheets | Updates Notified=TRUE and Score in Results tab |
 | 37 | Send No Results Telegram | telegram | Sends "no new openings" confirmation |
+| 38 | Is Jobs Command? | if | Gate after Parse Hours: `/jobs [hours]` continues to Read Config; anything else goes to Send Usage Telegram (no run) |
+| 39 | Send Usage Telegram | telegram | Replies with usage help to a message that is not a valid `/jobs` command (chat id comes from Parse Hours) |
+| 40 | More Pages? | if | After Filter & Accumulate Links: page was full (and under the 30-page cap) → Next Page URL, else back to Loop Over URLs |
+| 41 | Next Page URL | code | Builds the next page's request (same URL + `&start=`) and loops back into Wait Between Searches |
 
 ## Setup Guide (for new users)
 
@@ -243,7 +253,7 @@ Facts that must stay consistent with the guide (decided/verified 2026-09-20 — 
 - Local runs can't do anything Telegram-webhook-driven: no `/jobs N`, no Company Search. Scheduled runs work only while the machine is on.
 - Schedule: 8 cron rules in the `Schedule Trigger` node, timezone `Asia/Kolkata` from `GENERIC_TIMEZONE`/`TZ` in the compose file. (The old "7 AM / 7 PM" wording was stale.)
 - New companies go in **Bucket 4**. A company's LinkedIn ID comes from LinkedIn Jobs' Company filter (`f_C=` in the URL).
-- README and SETUP_GUIDE contain `<!-- SCREENSHOT SLOT: … -->` comments where the user's real screenshots go.
+- README and SETUP_GUIDE show the user's real screenshots from `docs/images/` (`job_bot.jpeg`, `search_bot.jpeg`, `email.jpeg`). Two Telegram messages, not one format: the job-bot digest line is `N. icon pct% — Company — Title (exp) (Tag)`; the Company Search line omits the company (it is in the header). `/jobs N` is **hours** (default 12), `/search Company N` is **days** (default 7, 1-90); both need digits only.
 
 ### Customization (quick map)
 - **Companies / buckets:** Config tab (§5.1). **Title filters:** Code nodes (§5.2, and the agent section below).
@@ -461,7 +471,7 @@ Telegram Trigger (/search)
   → Company Found?
     ├─ NO → Send Error Telegram
     └─ YES → Build Search URL → Loop Over URLs
-      → Wait 3s → Fetch → Extract → Filter → loop back
+      → Wait 3s → Fetch → Extract → Filter → More Pages? (yes: Next Page URL → Wait 3s; no: loop back)
     → Output Job Links → Has Links?
       ├─ NO → Send No Results Telegram
       └─ YES → Loop Over Jobs
@@ -474,7 +484,7 @@ Telegram Trigger (/search)
         └─ NO → (end, no email)
 ```
 
-### Node Reference (32 functional nodes + 4 sticky notes)
+### Node Reference (34 functional nodes + 4 sticky notes)
 
 | # | Node Name | Type | Purpose |
 |---|-----------|------|---------|
@@ -510,6 +520,8 @@ Telegram Trigger (/search)
 | 30 | LLM Succeeded? | if | Routes: LLM worked → email, LLM failed → end |
 | 31 | Format Email | code | Builds detailed email with summary, matches, gaps per job; also applies `min_match_percent`; reads `notify_email` and returns nothing (skipping Send Gmail) if none valid, else passes `sendTo` downstream |
 | 32 | Send Gmail | gmail | Sends detailed results email to `sendTo` from Format Email (= Settings tab `notify_email`); `To` is an expression, not a hardcoded address |
+| 33 | More Pages? | if | After Filter Links: page was full (and under the 30-page cap) → Next Page URL, else back to Loop Over URLs |
+| 34 | Next Page URL | code | Builds the next page's request (same URL + `&start=`) and loops back into Wait Between Searches |
 
 ### Telegram Message Formats
 
@@ -517,15 +529,15 @@ Telegram Trigger (/search)
 ```
 🔍 Jobs at Oracle (last 30 days) — 5 openings
 
-1. 🟢 82% — Software Engineer III (3-5 yrs) [SE-III]
+1. 🟢 82% — Software Engineer III (3-5 yrs) (SE-III)
    📍 Bengaluru, India
    🔗 https://linkedin.com/jobs/view/123
 
-2. 🟡 65% — Backend Engineer (3+ yrs) [Backend]
+2. 🟡 65% — Backend Engineer (3+ yrs) (Backend)
    📍 Bengaluru, India
    🔗 https://linkedin.com/jobs/view/456
 
-3. 🔴 38% — Cloud Engineer (5+ yrs) [Generic]
+3. 🔴 38% — Cloud Engineer (5+ yrs) (Generic)
    📍 Bengaluru, India
    🔗 https://linkedin.com/jobs/view/789
 ```
@@ -537,7 +549,7 @@ Color coding: 🟢 ≥70%, 🟡 50-69%, 🔴 <50%
 
 Found 5 openings in Bengaluru:
 
-1. Oracle — Software Engineer III (3-5 yrs) [SE-III]
+1. Oracle — Software Engineer III (3-5 yrs) (SE-III)
    📍 Bengaluru, India
    https://linkedin.com/jobs/view/123
 
