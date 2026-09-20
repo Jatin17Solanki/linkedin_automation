@@ -15,7 +15,7 @@ This file is both the technical reference and the briefing for an AI assistant h
 An n8n automation workflow (`n8n_job_search_v1.json`) that searches LinkedIn's public job pages for target companies in **Bengaluru**, filters results by experience level, logs to Google Sheets, and sends Telegram notifications. Defaults target mid-level backend/full-stack roles (about 3.5 years' experience) in Bengaluru; location, experience range and companies are all configurable (see below).
 
 ## File Locations
-- **Main workflow:** `n8n_job_search_v1.json` — scheduled job search with LLM resume matching (41 functional nodes + 5 sticky notes)
+- **Main workflow:** `n8n_job_search_v1.json` — scheduled job search with LLM resume matching (43 functional nodes + 5 sticky notes)
 - **Company search:** `n8n_company_search_v1.json` — on-demand `/search` command with LLM resume matching (34 functional nodes + 4 sticky notes)
 - **Job parser:** `n8n_job_parser_v1.json` — webhook API for parsing LinkedIn job pages (8 functional nodes + 1 sticky note)
 
@@ -192,7 +192,7 @@ Color coding: 🟢 ≥70%, 🟡 50-69%, 🔴 <50%
 
 Messages exceeding Telegram's 4096 char limit are automatically split into multiple messages with `...contd` headers.
 
-## Node Reference (41 functional nodes)
+## Node Reference (43 functional nodes)
 
 | # | Node Name | Type | Purpose |
 |---|-----------|------|---------|
@@ -237,6 +237,8 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 | 39 | Send Usage Telegram | telegram | Replies with usage help to a message that is not a valid `/jobs` command (chat id comes from Parse Hours) |
 | 40 | More Pages? | if | After Filter & Accumulate Links: page was full (and under the 30-page cap) → Next Page URL, else back to Loop Over URLs |
 | 41 | Next Page URL | code | Builds the next page's request (same URL + `&start=`) and loops back into Wait Between Searches |
+| 42 | Read Settings | googleSheets | Reads the Settings tab (Key/Value): location, experience range, match threshold. Sits between Store Config and Read Results |
+| 43 | Store Settings | code | Parses the Settings rows into `staticData.settings` (logs a warning when row 1 is not the literal `Key`/`Value` header) |
 
 ## Setup Guide (for new users)
 
