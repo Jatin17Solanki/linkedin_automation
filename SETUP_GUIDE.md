@@ -113,6 +113,8 @@ Open a chat with each new bot and send it `/start`. Telegram bots **cannot messa
 
 Message **@userinfobot** on Telegram. It replies with your numeric ID (e.g. `951213350`). That's the "chat ID" — the place the bots send digests. Copy it into your scratch note. (Both bots send to the same chat ID.)
 
+**This is also the lock on your bots.** A bot's `@username` is public, so both workflows only answer messages that come from this chat ID; anyone else who finds a bot is ignored, with no reply. That means the chat ID must be the chat you actually message the bots from. If you'd rather use a bot from a Telegram *group*, put the group's ID here instead (group IDs are negative numbers). If you leave `TELEGRAM_CHAT_ID` empty the lock is off.
+
 ## 1.3 Gemini API key
 
 1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and sign in.
@@ -724,7 +726,7 @@ These are **not** Sheet settings, on purpose: secrets shouldn't live in a spread
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TELEGRAM_CHAT_ID` | *(required)* | The chat the bots send to — [1.2](#12-telegram-bots) |
+| `TELEGRAM_CHAT_ID` | *(required)* | The chat the bots send to **and the only chat they answer** — [1.2](#12-telegram-bots) |
 | `GEMINI_API_KEY` | *(optional but recommended)* | Resume matching — [1.3](#13-gemini-api-key) |
 | `N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD` | *(set by the setup script)* | Protects the n8n web page on a VM |
 | `VM_IP` | *(set by the setup script)* | Builds the `nip.io` HTTPS address |
