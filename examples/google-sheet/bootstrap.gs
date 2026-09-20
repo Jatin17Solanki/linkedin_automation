@@ -22,13 +22,23 @@
  *   2. Extensions -> Apps Script.
  *   3. Delete the placeholder code, paste this whole file in, save.
  *   4. (Optional) Run your resume through the prompt in the README's "Resume
- *      → Sheet" section against any LLM, and paste the JSON it returns as
- *      the value of RESUME_JSON below (keep the quotes, it's a JS string).
- *      Skip this and leave it blank to get placeholder values instead.
- *   5. Run the `bootstrap` function once (Run menu, or the ▶ button).
- *      First run will prompt for authorization (this script only touches
- *      the sheet it's bound to, plus a public raw.githubusercontent.com
- *      fetch to pull the example CSVs — no other network or Drive access).
+ *      → Sheet" section against any LLM. It answers with ONE code block; use
+ *      that block's copy button, then paste the JSON BETWEEN THE TWO BACKTICKS
+ *      of RESUME_JSON below (String.raw`PASTE HERE`). Keep the backticks —
+ *      single quotes would break on JSON that spans several lines. Skip this
+ *      and leave it empty to get placeholder values instead.
+ *   5. Run the `bootstrap` function once: pick `bootstrap` in the function
+ *      dropdown in the toolbar, then click Run (▶).
+ *      The FIRST run asks for permission — that is expected, not an error:
+ *        a. "Authorization required" -> Review permissions -> pick your Google account.
+ *        b. "Google hasn't verified this app" -> Advanced -> "Go to <project
+ *           name> (unsafe)". (It is unverified only because you pasted the
+ *           script yourself instead of publishing it through Google's review.)
+ *        c. Allow. Google words the Sheets permission broadly (along the lines
+ *           of "see, edit, create and delete your spreadsheets"), but the code
+ *           only ever opens the sheet it is bound to (getActiveSpreadsheet),
+ *           and its one network call fetches the example CSVs from
+ *           raw.githubusercontent.com. It touches nothing else in your account.
  *   6. Refresh the spreadsheet tab in your browser — Config/Results/
  *      Settings/Resume tabs should now exist and be populated.
  *   7. If you left RESUME_JSON blank, edit the Resume tab with your own
@@ -51,12 +61,17 @@ var RESULTS_HEADERS = [
   'PrimaryTag', 'FirstSeen', 'Notified', 'Score', 'Status'
 ];
 
-// Paste the JSON returned by the README's resume-conversion prompt here
-// (e.g. RESUME_JSON = '{"name": "...", ...}') to auto-populate the Resume
-// tab from your own resume instead of getting placeholder values. Leave as
-// an empty string to skip this and use placeholders (matches pre-Phase-8
-// behavior exactly).
-var RESUME_JSON = '';
+// Paste the JSON returned by the README's resume-conversion prompt BETWEEN THE
+// BACKTICKS below to auto-populate the Resume tab from your own resume instead
+// of getting placeholder values, e.g.
+//     var RESUME_JSON = String.raw`{ "name": "...", ... }`;
+// It must be backticks, not quotes: the JSON usually spans many lines, which a
+// quoted string can't hold. It must be String.raw`...` (not plain `...`) so
+// escape sequences such as \" and \n inside your resume text reach JSON.parse
+// untouched. The only two things that can break it are a backtick character or
+// the two characters ${ inside your resume text; remove or reword those.
+// Leave it empty (as shipped) to skip this and use the placeholder values.
+var RESUME_JSON = String.raw``;
 
 // Exact keys the workflow's Code nodes read by name — order here is the
 // order they'll appear in the Resume tab. Keep in sync with CLAUDE.md's
@@ -107,7 +122,7 @@ function populateResumeFromJson_(sheet, jsonString) {
     parsed = JSON.parse(jsonString);
   } catch (e) {
     throw new Error('RESUME_JSON is not valid JSON: ' + e.message +
-      '. Check you pasted the LLM\'s raw JSON output (and nothing else) between the quotes.');
+      '. Check you pasted the LLM\'s JSON (and nothing else) between the two backticks of RESUME_JSON, with no leftover ```json fence lines.');
   }
 
   var missing = [];

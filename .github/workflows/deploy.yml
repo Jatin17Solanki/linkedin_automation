@@ -1,12 +1,15 @@
 name: Deploy Workflow to n8n
 
+# OPTIONAL and manual-only. This pushes the 3 workflow JSONs from this repo to a
+# running n8n instance over SSH + the n8n API. You only need it if you maintain your
+# own fork and edit the workflows; regular users can ignore it. It needs the repo
+# secrets GCP_VM_IP, GCP_SSH_USER, GCP_SSH_PRIVATE_KEY and N8N_API_KEY (see
+# SETUP_GUIDE.md). It deliberately does NOT run on push: without those secrets it
+# would fail on every merge, and re-importing can reset per-node settings such as
+# credential and Sheet selections on the target instance.
+# Run it from the Actions tab: Deploy Workflow to n8n -> Run workflow.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'n8n_job_search_v1.json'
-      - 'n8n_company_search_v1.json'
-      - 'n8n_job_parser_v1.json'
+  workflow_dispatch: {}
 
 jobs:
   deploy:

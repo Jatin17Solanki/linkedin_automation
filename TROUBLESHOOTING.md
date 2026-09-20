@@ -125,6 +125,16 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **If it still happens:** avoid firing several `/search` runs within a minute; the main workflow's scheduled runs share the same per-user quota; and you can raise the limit in Google Cloud Console → APIs & Services → Google Sheets API → Quotas.
 
+## Company Search skips a company whose Active is FALSE (or any bug that's "already fixed" still happens on your VM)
+
+**Symptom:** `/search <company>` says the company isn't found (or returns nothing) when that company's **Active** cell in the Config tab is FALSE, even though `/search` is supposed to ignore Active — Active only controls whether the *scheduled* Job Search includes a company.
+
+**Root cause:** your n8n instance is running an older copy of the workflow. Until 2026-08-26 (PR #25) `Lookup Company` filtered out inactive companies. The Docker image imports the workflow JSONs **only on the container's first start**, so a newer image or a `git pull` never changes workflows already stored in your instance's database — you keep whatever version was imported first. (A second thing that looks identical: between PR #25 and PR #32, *every* `/search` said "not found", whatever the company's Active value — see the next entry.)
+
+**How to tell:** open the `Lookup Company` node in the Company Search workflow. If its code contains `const isActive = String(c.Active)…` and `if (!isActive) return false;`, it's the old version.
+
+**Fix:** delete those two lines from the node (it's the only place Active is read), or update the whole workflow — see the entries about re-importing below for what a re-import resets. Then the same applies to any other fix in the repo's history: check that your instance's nodes match the current `n8n_*.json`.
+
 ## Company Search says "Company '…' not found in config" for a company that IS in your Config tab
 
 **Symptom:** `/search Oracle 30` replies *Company 'oracle' not found in config…* even though the company is right there in the Config tab (whether or not it's Active).

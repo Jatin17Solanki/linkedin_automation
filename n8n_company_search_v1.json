@@ -57,7 +57,7 @@
           "__rl": true,
           "mode": "list",
           "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
-          "cachedResultName": "n8n Test Claude"
+          "cachedResultName": "Your Google Sheet"
         }
       },
       "credentials": {
@@ -485,7 +485,7 @@
           "__rl": true,
           "mode": "list",
           "value": "YOUR_GOOGLE_SHEET_DOCUMENT_ID",
-          "cachedResultName": "n8n Test Claude"
+          "cachedResultName": "Your Google Sheet"
         }
       },
       "credentials": {
