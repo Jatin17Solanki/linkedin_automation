@@ -1,7 +1,18 @@
 # CLAUDE.md — LinkedIn Job Search n8n Workflow Context
 
+## Agent quickstart — read this first
+
+This file is both the technical reference and the briefing for an AI assistant helping a person set up, run, debug or customise this project. If you are that assistant:
+
+1. **Setting up for someone:** follow `SETUP_GUIDE.md` in its own order — Part 1 gather (checklist) → Part 2 run n8n → Part 3 connect → Part 4 optional workflows. Ask first: local or cloud (AWS is recommended)? Which workflows (Job Search is the core; Company Search is recommended and cloud-only)? Have them work through the Part 1 checklist *before* touching a server. Go one part at a time and confirm each step worked before the next.
+2. **What you cannot do for them:** create cloud/Google/Telegram accounts, talk to @BotFather, click through OAuth consent, or operate the n8n web UI. Tell them exactly what to click and where each value goes. **Never ask them to paste secrets** (bot tokens, API keys, OAuth Client Secret) into the chat.
+3. **Debugging:** ask for the actual failing data — the n8n execution output / error text, or `docker compose logs` — before naming a root cause, and reproduce with the real workflow code rather than only reading it. Past bugs here (duplicate node ids, a node reading the wrong input, a Sheets read fanning out) all looked like something else at first.
+4. **Where things are:** `README.md` (human landing page), `SETUP_GUIDE.md` (walkthrough), `TROUBLESHOOTING.md` (known problems), this file (reference), `n8n_*.json` (the three workflows), `examples/google-sheet/` (bootstrap script + templates), `deploy/` (VM scripts), `mcp-server/`.
+5. **Changing the workflows:** read "Editing workflow JSON — agent checklist" and "Title/Seniority Filters — agent instructions" below first. Logic is deliberately duplicated between the two main workflows, so edit both. `main` is branch-protected: work on a branch and open a PR.
+6. Keep `README.md`, `SETUP_GUIDE.md` and this file consistent when behaviour changes. `README.md` is for humans — keep agent-level detail out of it.
+
 ## What This Is
-An n8n automation workflow (`n8n_job_search_v1.json`) that searches LinkedIn's public job pages for target companies in **Bengaluru**, filters results by experience level, logs to Google Sheets, and sends Telegram notifications. Built for Jatin's job search targeting mid-level backend/full-stack roles (3.5 years experience).
+An n8n automation workflow (`n8n_job_search_v1.json`) that searches LinkedIn's public job pages for target companies in **Bengaluru**, filters results by experience level, logs to Google Sheets, and sends Telegram notifications. Defaults target mid-level backend/full-stack roles (about 3.5 years' experience) in Bengaluru; location, experience range and companies are all configurable (see below).
 
 ## File Locations
 - **Main workflow:** `n8n_job_search_v1.json` — scheduled job search with LLM resume matching (37 functional nodes + 5 sticky notes)
@@ -77,10 +88,10 @@ https://www.linkedin.com/jobs/search/?keywords=<encoded_boolean_query>&f_C=<comp
 - `f_TPR=r<seconds>` = time window (e.g., `r86400` = 24 hours)
 - `f_C` = comma-separated LinkedIn company IDs
 - `geoId=102713980` = India (broad geo) — default, overridable via the Settings tab's `location_geo_id` or the `LOCATION_GEO_ID` env var
-- `f_PP=105214831` = **Bengaluru, Karnataka** (precise location filter) — default, overridable via the Settings tab's `location_f_pp` or the `LOCATION_F_PP` env var; accepts a comma-separated list of place IDs for multi-city (OR-matched) — see `SETUP_GUIDE.md`'s "Adding multiple cities" for known place IDs
+- `f_PP=105214831` = **Bengaluru, Karnataka** (precise location filter) — default, overridable via the Settings tab's `location_f_pp` or the `LOCATION_F_PP` env var; accepts a comma-separated list of place IDs for multi-city (OR-matched) — see `SETUP_GUIDE.md` §5.3 ("Location and multiple regions") for known place IDs
 - Keywords use Boolean: `"SDE II" OR "SDE 2" OR ...`
-- Bucket 1 & 2 keywords include `AND NOT ("senior" OR "staff" OR ...)`
-- Bucket 3 & 4 keywords only exclude staff/manager/etc, NOT senior
+- The bucket keyword templates (`bucketKeywords` in `Build Search URLs`) are plain `OR` lists of title phrases — there is **no** `AND NOT` in the URL. The "senior" exclusion for buckets 1 & 2 happens *after* the fetch, via the `negativeSenior` regex in `Filter & Accumulate Links` / `Filter Links` (see Filters below)
+- Buckets 3 & 4: only the `negativeBase` regex (staff/manager/etc.) applies, NOT senior. Bucket 3 has one extra keyword, `"Senior Member, Tech"`. A company whose Bucket cell is not 1-4 is silently skipped (`Build Search URLs` has no keywords for it)
 
 ## Filters
 
@@ -127,7 +138,7 @@ Regex: `/-(\d{8,})(?:\?|$)/` — extracts the numeric job ID from LinkedIn URLs 
 `min_experience_years`/`max_experience_years` together describe the experience bracket you're targeting (e.g. "3 to 5 years"). A role matches if its own stated range overlaps this bracket at all, touching boundaries counted as a match — a "2-4 years" posting matches a `3-5` target, and so does an open-ended "5+ years" posting (no ceiling to compare against, so it always satisfies the upper bound). Deliberately permissive: implemented in `Process & Filter Job` as `jobMin <= MAX_EXPERIENCE_YEARS && jobMax >= MIN_EXPERIENCE_YEARS` (jobMax = `Infinity` for open-ended roles), biased toward false positives over dropping borderline roles. Defaults (`min=0`, `max=4`) reproduce the original single-ceiling behavior exactly. Unparseable job experience always passes through regardless of the range (see "Honest filtering" below).
 | `min_match_percent` | `MIN_MATCH_PERCENT` | `0` (no suppression) |
 
-`min_match_percent` hides jobs scoring below the threshold from the Telegram message only — it does **not** affect whether they're written to the Results sheet or marked `Notified`; suppressed jobs are still marked notified (via the full, unfiltered job list in `Format Telegram`'s `jobIds`) so they're never re-scored on a later run. Only applies when Gemini scoring succeeded — the plain-fallback format (LLM failed) never suppresses, since there's no score to filter on. **Also implemented in `n8n_company_search_v1.json`** (both its Telegram message and Gmail digest — Gmail additionally notes how many roles were hidden, since it has more room than Telegram's char limit) — the two workflows' Settings-tab handling stays in sync per `plan.md`'s "duplicated logic" decision.
+`min_match_percent` hides jobs scoring below the threshold from the Telegram message only — it does **not** affect whether they're written to the Results sheet or marked `Notified`; suppressed jobs are still marked notified (via the full, unfiltered job list in `Format Telegram`'s `jobIds`) so they're never re-scored on a later run. Only applies when Gemini scoring succeeded — the plain-fallback format (LLM failed) never suppresses, since there's no score to filter on. **Also implemented in `n8n_company_search_v1.json`** (both its Telegram message and Gmail digest — Gmail additionally notes how many roles were hidden, since it has more room than Telegram's char limit) — the two workflows' Settings-tab handling stays in sync by design (the logic is deliberately duplicated in both workflows, not shared).
 
 `notify_email` is Settings-only (no env var) and only used by the **Company Search** workflow: the recipient(s) of its email digest, comma-separated allowed. `Format Email` reads it and, if none are valid (blank / key missing / malformed), logs why and returns nothing so `Send Gmail` never runs — the Telegram results were already sent and are unaffected. Previously the address was hardcoded in `Send Gmail`'s `To` field; that field is now `={{ $json.sendTo }}` and an import/update drops any address typed there, so users upgrading must add the Settings row (a Settings tab from the current `bootstrap.gs` already has it, blank). The main workflow sends no email.
 
@@ -219,33 +230,26 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 
 ## Setup Guide (for new users)
 
-### Prerequisites
-- n8n instance (local or cloud)
-- Google account with Sheets API access
-- Telegram bot (create via @BotFather)
+The human-facing walkthrough is `SETUP_GUIDE.md` (the README is the landing page: what it does, mockups, which setup to choose, an index). It is ordered so the user never has to stop mid-setup to fetch a key — **follow its order when guiding someone; don't improvise a different one:**
 
-### Step-by-step
-1. **Import** `n8n_job_search_v1.json` into n8n
-2. **Google Sheets:**
-   - Create a Google Sheet with two tabs: "Config" and "Results"
-   - Config tab columns: `Company | CompanyID | Bucket | Active | Notes`
-   - Results tab columns: `JobID | Title | Company | Location | Link | ExperienceReq | PrimaryTag | FirstSeen | Notified | Score | Status`
-   - Update the `documentId` value in the JSON (or re-select the sheet in each Google Sheets node)
-   - If your Results tab has a different gid, update in JSON or re-select in n8n UI
-3. **Credentials** (connect in n8n UI — all nodes show "CONFIGURE_ME"):
-   - Google Sheets OAuth2: connect your Google account
-   - Telegram Bot: add your bot token from @BotFather
-4. **Telegram Chat ID:**
-   - Update `chatId` in "Send Telegram" and "Send No Results Telegram" nodes with your chat ID
-5. **Activate** the workflow (toggle in top-right) for scheduled runs
-6. **Test** with Manual Trigger or Webhook: `http://localhost:5678/webhook/job-search?hours=24`
+1. **Part 1 — gather first:** checklist (§1.1) → Telegram bot(s) (§1.2: one bot for Job Search, a *second* only for Company Search, because Telegram allows one webhook per bot) → Gemini key (§1.3) → Google Sheet via `bootstrap.gs` plus the resume→JSON prompt (§1.4) → Google OAuth client (§1.5) → decide settings (§1.6).
+2. **Part 2 — run n8n:** local (§2A), AWS (§2B, recommended) or GCP (§2C). The setup scripts ask for exactly three things: n8n basic-auth username/password, Gemini key, Telegram chat ID.
+3. **Part 3 — connect n8n:** Google Sheets + Telegram credentials, a worked example on the `Read Config` node, the other 6 Sheets nodes (each needs the credential **and** the Document re-selected, then the Sheet tab re-checked) and the Telegram nodes; on cloud enable the Telegram Trigger; test; activate.
+4. **Parts 4-6:** optional workflows (Company Search §4.1, Job Parser + MCP §4.2), tuning (§5), operations/CI-CD/costs (§6).
 
-### Customization
-- **Companies:** Edit the Config tab in Google Sheets (no JSON changes needed)
-- **Location:** Set via the Settings tab (`location_geo_id`/`location_f_pp`/`location_city_names`) or matching env vars. Defaults to Bengaluru if unset. Supports multiple cities (comma-separated `location_f_pp` + `location_city_names`) — see `SETUP_GUIDE.md`'s "Adding multiple cities" for the step-by-step, a table of already-known place IDs (Bengaluru/Mumbai/Hyderabad/Gurugram), and a worked 3-city example. Don't re-derive a place ID that's already in that table.
-- **Experience threshold:** Set the `MAX_EXPERIENCE_YEARS` env var (default `4`)
-- **Schedule:** Edit cron expression in "Schedule Trigger" node
-- **For cloud deployment:** Enable the "Telegram Trigger" node and disable/remove "Webhook Trigger"
+Facts that must stay consistent with the guide (decided/verified 2026-09-20 — don't re-derive):
+- `TELEGRAM_CHAT_ID` and `GEMINI_API_KEY` are **env-only**, deliberately not Settings-tab keys (secrets shouldn't live in a Sheet that may be shared). The chat ID is **not** typed into the Send Telegram nodes — the old instruction to do so was wrong.
+- The Google OAuth consent screen must be **published** (In production): a Testing-mode app's sign-in expires after 7 days and the Sheets credential silently dies. Verification is not needed for personal use.
+- Local runs can't do anything Telegram-webhook-driven: no `/jobs N`, no Company Search. Scheduled runs work only while the machine is on.
+- Schedule: 8 cron rules in the `Schedule Trigger` node, timezone `Asia/Kolkata` from `GENERIC_TIMEZONE`/`TZ` in the compose file. (The old "7 AM / 7 PM" wording was stale.)
+- New companies go in **Bucket 4**. A company's LinkedIn ID comes from LinkedIn Jobs' Company filter (`f_C=` in the URL).
+- README and SETUP_GUIDE contain `<!-- SCREENSHOT SLOT: … -->` comments where the user's real screenshots go.
+
+### Customization (quick map)
+- **Companies / buckets:** Config tab (§5.1). **Title filters:** Code nodes (§5.2, and the agent section below).
+- **Location, experience, match threshold:** Settings tab, env var as fallback (§5.3, §5.4, §5.6).
+- **Schedule:** cron rules in the "Schedule Trigger" node (§5.5).
+- **Cloud deployment:** enable "Telegram Trigger", optionally disable "Webhook Trigger".
 
 ### Title/Seniority Filters — agent instructions
 
@@ -254,7 +258,7 @@ If a user asks you to change what job titles get filtered (e.g. "also exclude 's
 - **Negative title filter** (excludes matching titles from all buckets): node `Filter & Accumulate Links` in `n8n_job_search_v1.json`, node `Filter Links` in `n8n_company_search_v1.json`. Look for the `negativeBase` regex (applies to all 4 buckets) and `negativeSenior` regex (buckets 1 & 2 only, excludes `senior`/`sr`).
 - **Bucket keyword templates** (what search terms define "SDE II" vs "Level 3" vs generic): node `Build Search URLs` in the main workflow, `Build Search URL` in company search.
 
-**When editing either:** you must edit the same regex/keyword string in **both** `n8n_job_search_v1.json` and `n8n_company_search_v1.json` — this logic is intentionally duplicated between the two workflows (see "Duplicated logic" in `plan.md`'s locked-in decisions), not shared via a sub-workflow. Editing only one file will make the two workflows silently disagree on what counts as a match. After editing, validate both files with `node -e "JSON.parse(require('fs').readFileSync('<file>'))"` before considering the change done.
+**When editing either:** you must edit the same regex/keyword string in **both** `n8n_job_search_v1.json` and `n8n_company_search_v1.json` — this logic is intentionally duplicated between the two workflows (a deliberate choice — simpler than a shared sub-workflow), not shared. Editing only one file will make the two workflows silently disagree on what counts as a match. After editing, validate both files with `node -e "JSON.parse(require('fs').readFileSync('<file>'))"` before considering the change done.
 
 ### Editing workflow JSON — agent checklist
 
@@ -287,7 +291,7 @@ node -e "for (const f of ['n8n_job_search_v1.json','n8n_company_search_v1.json',
 ```
 Internet → Caddy (auto-HTTPS via nip.io, :443) → n8n (:5678) → SQLite (Docker volume)
 ```
-- VM: GCP e2-micro (free indefinitely, but only once the account is upgraded out of its 90-day/$300 Free Trial into standard billing — staying in trial mode means the VM gets suspended when the trial lapses, regardless of the Always Free quota; see `SETUP_GUIDE.md` Part 2) or AWS EC2 t2.micro/t3.micro (12-month free tier, full stop, then hourly billing), Ubuntu 22.04
+- VM: GCP e2-micro (free indefinitely, but only once the account is upgraded out of its 90-day/$300 Free Trial into standard billing — staying in trial mode means the VM gets suspended when the trial lapses, regardless of the Always Free quota; see `SETUP_GUIDE.md` §2C) or AWS EC2 `t3.micro` (accounts created on/after 2025-07-15 get a 6-month Free plan with up to $200 credits; older accounts get the 12-month free tier; hourly billing after — `t2.micro` is only free-tier eligible on older accounts), Ubuntu 22.04
 - Domain: `<VM_IP>.nip.io` (free, no DNS registration)
 - HTTPS: Let's Encrypt via Caddy (automatic)
 
@@ -322,14 +326,14 @@ The setup script prompts for these interactively (Step 0 below), so have them re
 
 ### AWS EC2 VM Setup
 0. Have the 3 values above ready. **If this is a brand-new AWS account**, check first whether it's under AWS's new-account verification hold (console shows "pending verification... may take up to 2 days") — this can block EC2 instance launches entirely and has nothing to do with this project; there's no status page for it beyond opening a free Support Case if it drags past 48h
-1. Create a `t2.micro`/`t3.micro` VM (Ubuntu 22.04) with a Security Group allowing inbound 22/80/443 — **AWS gates traffic at the Security Group before it ever reaches the VM's own iptables rules**, unlike GCP; both must allow 80/443 or nothing gets through
+1. Create a `t3.micro` VM (Ubuntu 22.04; `t2.micro` isn't free-tier eligible on accounts created since 2025-07-15) with a Security Group allowing inbound 22/80/443 — **AWS gates traffic at the Security Group before it ever reaches the VM's own iptables rules**, unlike GCP; both must allow 80/443 or nothing gets through
 2. SSH in as `ubuntu` (not your AWS account name), clone the repo, run `sudo bash deploy/setup-aws.sh`
 3. Same interactive prompt order/behavior as GCP step 3 above (basic auth → Gemini key → Telegram chat ID)
 4. Open `https://<VM_IP>.nip.io`, log in, set up Google Sheets + Telegram credentials — identical to the GCP flow from here
 5. Import workflow, enable Telegram Trigger node, activate workflow
 6. Generate n8n API key (Settings > API) for CI/CD
 
-Full walkthrough (Security Group config, Elastic IP, free-tier time limits, key-pair setup): `SETUP_GUIDE.md`'s Part 3.
+Full walkthrough (Security Group config, Elastic IP, free-tier time limits, key-pair setup): `SETUP_GUIDE.md` §2B.
 
 ### Editing env vars after deploy
 `setup-gcp.sh`/`setup-aws.sh` only prompt once, when first creating `/opt/n8n/.env` (**not** the repo checkout's `deploy/.env` — that's only ever a template, never read by the running stack). Re-running the script later never re-prompts or overwrites existing values, only refreshes `VM_IP`. To change `GEMINI_API_KEY`, `TELEGRAM_CHAT_ID`, or anything else in the file (rotate a key, fix a typo, add a value that was left blank at setup):
@@ -594,7 +598,7 @@ New "Resume" tab in the same Google Sheet — two-column Key/Value layout:
 
 **Telegram bot setup:** Each workflow needs its own Telegram bot. The `/jobs` workflow uses one bot, the `/search` workflow uses another. Both bots can message the same chat (same `chatId`).
 
-Full human-facing walkthrough: `SETUP_GUIDE.md` Part 1B.
+Full human-facing walkthrough: `SETUP_GUIDE.md` §4.1.
 
 ## Job Parser Webhook (`/parse-job`)
 
@@ -700,7 +704,7 @@ A lightweight Node.js MCP server that exposes the job parser webhook as a tool f
 3. Add the config above to Claude Desktop settings (Developer > Edit Config), with `MCP_WEBHOOK_URL` pointing at that instance's real `/webhook/parse-job` URL
 4. Restart Claude Desktop — the `parse-linkedin-job` tool appears automatically
 
-Full human-facing walkthrough: `SETUP_GUIDE.md` Part 1C.
+Full human-facing walkthrough: `SETUP_GUIDE.md` §4.2.
 
 ## V2 Roadmap
 - Auto resume customization

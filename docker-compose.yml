@@ -22,6 +22,8 @@ services:
     environment:
       - GENERIC_TIMEZONE=Asia/Kolkata
       - TZ=Asia/Kolkata
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
       - N8N_SECURE_COOKIE=false
       - WEBHOOK_URL=http://localhost:5678/
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}

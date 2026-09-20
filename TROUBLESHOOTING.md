@@ -157,7 +157,7 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Root cause:** the committed JSON always ships with a placeholder `documentId` (`YOUR_GOOGLE_SHEET_DOCUMENT_ID`) — a real Sheet ID can't be baked into a public template. A full reimport replaces a node's entire parameter block with what's in the file, placeholder included, wiping out whatever real Sheet you'd previously selected. n8n's resource-locator UI also clears the Sheet field's state whenever you touch the Document dropdown, even for fields using `name` mode — this appears to be inherent n8n UI behavior, not something fixable from the workflow JSON.
 
-**Fix:** none available — this is expected any time you reimport the whole workflow (initial setup, or pulling a future release with workflow changes). After any reimport, re-check all 7 Google Sheets nodes (`Read Config`, `Read Results`, `Append to Results`, `Read Unnotified`, `Update Notified Status`, `Read Resume`, `Read Settings`) per `SETUP_GUIDE.md` Step 5. If you're only changing a Code node's JS logic (not adding/removing nodes), you can avoid this entirely by pasting the updated code directly into that one node instead of reimporting the whole file.
+**Fix:** none available — this is expected any time you reimport the whole workflow (initial setup, or pulling a future release with workflow changes). After any reimport, re-check all 7 Google Sheets nodes (`Read Config`, `Read Results`, `Append to Results`, `Read Unnotified`, `Update Notified Status`, `Read Resume`, `Read Settings`) per `SETUP_GUIDE.md` §3.4 (the worked example: credential, Document, then Sheet). If you're only changing a Code node's JS logic (not adding/removing nodes), you can avoid this entirely by pasting the updated code directly into that one node instead of reimporting the whole file.
 
 ## AWS EC2: page never loads even though `docker compose ps` shows healthy containers
 
@@ -165,7 +165,7 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Root cause:** Unlike GCP (where the "Allow HTTP/HTTPS" checkboxes at VM creation are the only gate), AWS EC2 instances sit behind a **Security Group** that filters inbound traffic *before* it ever reaches the VM's network stack. `setup-aws.sh` opens ports 80/443 via `iptables` on the VM itself (same as `setup-gcp.sh`), but that's a second, independent gate — both the Security Group and iptables have to allow the traffic, and iptables being open does nothing if the Security Group blocks it first.
 
-**Fix:** In the AWS Console, go to your instance → **Security** tab → click the attached Security Group → confirm inbound rules allow TCP 80 and 443 from `0.0.0.0/0` (Anywhere). See `SETUP_GUIDE.md` Part 3, Step 1.3 for the full rule table. This is the single most common "it's not working" report for the AWS path and has no GCP equivalent.
+**Fix:** In the AWS Console, go to your instance → **Security** tab → click the attached Security Group → confirm inbound rules allow TCP 80 and 443 from `0.0.0.0/0` (Anywhere). See `SETUP_GUIDE.md` §2B (Step 1.3) for the full rule table. This is the single most common "it's not working" report for the AWS path and has no GCP equivalent.
 
 ## Before you go live: check your Google Sheet's sharing settings
 
