@@ -200,7 +200,7 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 | 2 | Manual Trigger | manualTrigger | For ad-hoc runs from n8n UI |
 | 3 | Telegram Trigger | telegramTrigger | Listens for `/jobs` commands (DISABLED — enable on cloud) |
 | 4 | Webhook Trigger | webhook | Local dev trigger: `/webhook/job-search?hours=N` |
-| 5 | Parse Hours | code | Parses hours from Telegram `/jobs N` command |
+| 5 | Parse Hours | code | Parses hours from Telegram `/jobs N` command. **First ignores (returns no items) any message whose chat id != `$env.TELEGRAM_CHAT_ID`** (owner-only lock; off when the env var is empty) |
 | 6 | Parse Webhook Hours | code | Parses hours from webhook query param |
 | 7 | Read Config | googleSheets | Reads Config tab (companies + buckets) |
 | 8 | Store Config | code | Saves config to workflow static data, initializes processedJobs |
@@ -255,6 +255,7 @@ Facts that must stay consistent with the guide (decided/verified 2026-09-20 — 
 - Local runs can't do anything Telegram-webhook-driven: no `/jobs N`, no Company Search. Scheduled runs work only while the machine is on.
 - Schedule: 8 cron rules in the `Schedule Trigger` node, timezone `Asia/Kolkata` from `GENERIC_TIMEZONE`/`TZ` in the compose file. (The old "7 AM / 7 PM" wording was stale.)
 - New companies go in **Bucket 4**. A company's LinkedIn ID comes from LinkedIn Jobs' Company filter (`f_C=` in the URL).
+- **Both bots are owner-only.** A bot's `@username` is public, so `Parse Hours` and `Parse Search Command` return nothing (silently) for any chat other than `TELEGRAM_CHAT_ID`. Reply routing differs by design: the job bot's digest/no-results messages always go to `$env.TELEGRAM_CHAT_ID` (scheduled runs have no incoming message to answer), while Company Search replies to the chat that sent the command (now always the owner, thanks to the lock). Tell users that a wrong `TELEGRAM_CHAT_ID` looks like a bot that never answers; the execution log prints the id to use.
 - README and SETUP_GUIDE show the user's real screenshots from `docs/images/` (`job_bot.jpeg`, `search_bot.jpeg`, `email.jpeg`). Two Telegram messages, not one format: the job-bot digest line is `N. icon pct% — Company — Title (exp) (Tag)`; the Company Search line omits the company (it is in the header). `/jobs N` is **hours** (default 12), `/search Company N` is **days** (default 7, 1-90); both need digits only.
 
 ### Customization (quick map)
@@ -492,7 +493,7 @@ Telegram Trigger (/search)
 | # | Node Name | Type | Purpose |
 |---|-----------|------|---------|
 | 1 | Telegram Trigger | telegramTrigger | Listens for `/search` commands |
-| 2 | Parse Search Command | code | Extracts company name + days (default 7, clamped 1-90) |
+| 2 | Parse Search Command | code | Extracts company name + days (default 7, clamped 1-90). **First ignores any message whose chat id != `$env.TELEGRAM_CHAT_ID`** (owner-only lock, same as Parse Hours) |
 | 3 | Read Config | googleSheets | Reads Config tab (same sheet as main workflow) |
 | 4 | Read Settings | googleSheets | Reads Settings tab (location/experience-range/match-threshold, plus `notify_email`), same pattern as main workflow. **Execute Once is on**: its input is `Read Config`'s ~50 rows (one item per Config row) and a Sheets node runs once per input item, so without it every `/search` made ~50 reads of this tab (Sheets 429). |
 | 5 | Store Settings | code | Parses Settings rows into `staticData.settings` |

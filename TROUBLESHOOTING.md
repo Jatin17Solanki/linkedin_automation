@@ -175,6 +175,14 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Fix:** use a shorter window, or split the busiest group: a bucket with many companies (Bucket 4 in the starter list has 68) fills the cap fastest. The cap is `MAX_PAGES` in the `Filter & Accumulate Links` node (`Filter Links` in Company Search). An instance imported before this change still has the old one-page behavior — see the "fix isn't applying" entry above.
 
+## Your bots ignore your messages (no reply at all)
+
+**Symptom:** you message Bot #1 or Bot #2 and nothing happens — not even the usage help.
+
+**Root cause:** both workflows only answer the chat whose ID is in `TELEGRAM_CHAT_ID`; messages from any other chat are ignored on purpose (a bot's `@username` is public). It usually means the ID doesn't match the chat you're typing in — a typo, or you're messaging from a group but the ID is your personal one.
+
+**Fix:** open the workflow's latest execution in n8n: the `Parse Hours` / `Parse Search Command` log says `Ignoring a message from an unauthorised chat (<id>)` — that `<id>` is the chat you're messaging from. Put it in `TELEGRAM_CHAT_ID` (`sudo nano /opt/n8n/.env`, then `cd /opt/n8n && sudo docker compose up -d`; a plain `restart` doesn't re-read it). Leaving the value empty turns the lock off. An instance imported before this check keeps answering everyone until you update its workflows (SETUP_GUIDE 6.2).
+
 ## The job bot answers with usage help instead of searching
 
 **Symptom:** you message Bot #1 and get "Hi! To search LinkedIn right now, send /jobs followed by a number of hours…".

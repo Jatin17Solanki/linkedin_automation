@@ -93,7 +93,7 @@ The first is the core. **We recommend Company Search too** — it's what you'll 
 
 ## Privacy and cost
 
-**You run it, you own it.** The software is free and open source (MIT). It runs on a machine you control — your own computer or your own cloud VM — with no account, hosted service or analytics from the author. Your company list, settings, resume summary and job history live in a Google Sheet **you** own (keep it private — never "anyone with the link"), and nothing is sent to the author.
+**You run it, you own it.** The software is free and open source (MIT). It runs on a machine you control — your own computer or your own cloud VM — with no account, hosted service or analytics from the author. Your company list, settings, resume summary and job history live in a Google Sheet **you** own (keep it private — never "anyone with the link"), and nothing is sent to the author. Your bots also only answer **your** Telegram chat (the chat ID you configure): a bot's username is public, but messages from anyone else who finds it are silently ignored.
 
 **What does leave your setup — worth knowing:**
 
