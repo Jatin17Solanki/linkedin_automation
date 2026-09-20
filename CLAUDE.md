@@ -262,7 +262,8 @@ Every "validated" check used earlier in this project (`JSON.parse`, `node --chec
 
 - **Node `id`s must be unique within the file, and so must node `name`s** (connections reference nodes by *name*). Never copy an id from another node — grep the file for an unused one.
 - **Every connection endpoint must match an existing node name.**
-- **A node fed by a loop's `done` output runs once per item.** For Google Sheets (default quota 60 read requests/min/user) that is a 429 waiting to happen on a big result set — collapse first (a Code node returning one item, like the main workflow's `Trigger Read`) or set the node's `executeOnce`. Company Search's `Read Resume` shipped without either until PR #32.
+- **A node runs once per input item — and a Sheets read emits one item per ROW.** Anything wired after a loop's `done` output (one item per iteration) or directly after a multi-row Sheets read (e.g. `Read Config`, ~50 rows) fans out into that many runs; for Google Sheets (default quota 60 read requests/min/user) that is a 429 waiting to happen. Collapse first (a Code node returning one item — the main workflow's `Store Config` / `Trigger Read`) or set the node's `executeOnce`. Company Search's `Read Settings` (after `Read Config`) and `Read Resume` (after the job loop) shipped without either until PR #32.
+- **Inserting a node into the middle of an existing chain? Re-check every downstream consumer of `$input` — its input just changed.** `Lookup Company` silently stopped finding any company when PR #25 put `Read Settings`/`Store Settings` in front of it (it read `$input`, which became Store Settings' status item). Prefer `$('Node Name')` for data that isn't the immediate predecessor's output, and test the chain with the real nodes wired as the graph says, not each node against hand-fed input.
 - Edit as **text** and keep the file's CRLF endings — re-serializing with `JSON.stringify` reformats the whole file and buries the real diff.
 - Keep the sanitized placeholders (`YOUR_GOOGLE_SHEET_DOCUMENT_ID`, `CONFIGURE_ME`); never commit a live n8n export as-is.
 - Test data layouts produced by `bootstrap.gs` by simulating n8n's read (row 1 = column names), not just the parser that builds them.
@@ -476,9 +477,9 @@ Telegram Trigger (/search)
 | 1 | Telegram Trigger | telegramTrigger | Listens for `/search` commands |
 | 2 | Parse Search Command | code | Extracts company name + days (default 7, clamped 1-90) |
 | 3 | Read Config | googleSheets | Reads Config tab (same sheet as main workflow) |
-| 4 | Read Settings | googleSheets | Reads Settings tab (location/experience-range/match-threshold, plus `notify_email`), same pattern as main workflow |
+| 4 | Read Settings | googleSheets | Reads Settings tab (location/experience-range/match-threshold, plus `notify_email`), same pattern as main workflow. **Execute Once is on**: its input is `Read Config`'s ~50 rows (one item per Config row) and a Sheets node runs once per input item, so without it every `/search` made ~50 reads of this tab (Sheets 429). |
 | 5 | Store Settings | code | Parses Settings rows into `staticData.settings` |
-| 6 | Lookup Company | code | Case-insensitive partial match against **all** companies in Config — `Active` is not checked (see Key Differences above) |
+| 6 | Lookup Company | code | Case-insensitive partial match against **all** companies in Config — `Active` is not checked (see Key Differences above). Reads the Config rows from **`$('Read Config')`, not `$input`** — its input is `Store Settings`' single status item, so reading `$input` made every lookup "not found" (bug from PR #25, fixed in #32) |
 | 7 | Company Found? | if | Routes found/not-found |
 | 8 | Send Error Telegram | telegram | "Company not found" or "Invalid command" error |
 | 9 | Build Search URL | code | Builds LinkedIn URL using company's bucket keywords |

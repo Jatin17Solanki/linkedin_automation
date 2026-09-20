@@ -117,13 +117,21 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 ## Company Search fails with "The service is receiving too many requests" (Sheets quota exceeded)
 
-**Symptom:** `/search …` errors on a Google Sheets node with *"The service is receiving too many requests from you — Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com'"*. The node's panel also says *"This node runs multiple times, once for each input item."*
+**Symptom:** `/search …` errors on `Read Settings` (or another Google Sheets node) with *"The service is receiving too many requests from you — Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com'"*. The node's panel also says *"This node runs multiple times, once for each input item."*
 
-**Root cause:** not an attack, and nothing to do with LinkedIn — it's Google's per-user Sheets read quota (60 read requests per minute by default), exhausted by the workflow itself. In `n8n_company_search_v1.json` the job loop's "done" output emits one item per job found and fed **`Read Resume`** directly, so a search that found K jobs read the Resume tab K times back-to-back (the main workflow avoids this with a `Trigger Read` node that collapses the items into one). A big company over a 30-day window easily finds dozens of jobs, and two or three `/search` runs inside the same minute finish off the quota. The other two Sheets nodes in this workflow (`Read Config`, `Read Settings`) are fed a single item and only ever ran once.
+**Root cause:** not an attack, and nothing to do with LinkedIn — it's Google's per-user Sheets read quota (60 read requests per minute by default), exhausted by the workflow itself. A Sheets node runs **once per input item**, and a Sheets read emits **one item per row**. In `n8n_company_search_v1.json`, `Read Config` returns one item per Config row (~50 companies) and `Read Settings` was wired directly after it, so **every `/search` made ~50 back-to-back reads of the Settings tab** (introduced by the Settings-tab change in #25 — before it, nothing sat between `Read Config` and `Lookup Company`); a second `/search` inside the same minute tipped it over. Separately, `Read Resume` sits after the job loop's "done" output, which emits one item per job found, so it added one more read per job. (The main workflow is unaffected: its `Store Config` / `Trigger Read` Code nodes collapse the items to one before the next Sheets node.)
 
-**Fix:** `Read Resume` now has n8n's **Execute Once** setting on, so it reads the tab a single time per run. On an already-imported instance don't wait for a re-import: open `Read Resume` → **Settings** → turn on **Execute Once** (takes effect immediately). The quota window is per minute — wait about a minute before retrying the failed run.
+**Fix:** `Read Settings` and `Read Resume` now have n8n's **Execute Once** setting on — about 3 Sheets reads per `/search` instead of 50+. On an already-imported instance don't wait for a re-import: open each of those two nodes → **Settings** → turn on **Execute Once** (takes effect immediately). The quota window is per minute, so wait about a minute before retrying the failed run.
 
 **If it still happens:** avoid firing several `/search` runs within a minute; the main workflow's scheduled runs share the same per-user quota; and you can raise the limit in Google Cloud Console → APIs & Services → Google Sheets API → Quotas.
+
+## Company Search says "Company '…' not found in config" for a company that IS in your Config tab
+
+**Symptom:** `/search Oracle 30` replies *Company 'oracle' not found in config…* even though the company is right there in the Config tab (whether or not it's Active).
+
+**Root cause:** `Lookup Company` built its company list from `$input` — whatever the previous node passed it. When the Settings-tab change (#25) put `Read Settings` and `Store Settings` between `Read Config` and `Lookup Company`, its input became `Store Settings`' single status item instead of the Config rows, so no company could ever match. The per-node tests at the time fed `Lookup Company` the Config rows directly, which is why they never saw it.
+
+**Fix:** `Lookup Company` now reads `$('Read Config').all()` directly. On an already-imported instance without re-importing: open `Lookup Company` and change the line `const config = $input.all().map(i => i.json);` to `const config = $('Read Config').all().map(i => i.json);`.
 
 ## Clicking one node in the editor opens a different node
 

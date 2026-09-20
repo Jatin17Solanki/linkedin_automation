@@ -77,7 +77,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst config = $input.all().map(i => i.json);\nconst query = (staticData.companyQuery || '').toLowerCase();\n\n// If parse error, pass through with no matches\nif (staticData.parseError) {\n  staticData.matchedCompanies = [];\n  return [{json: {found: false, reason: 'parse_error'}}];\n}\n\n// Case-insensitive partial match against company names\nconst matches = config.filter(c => {\n  // Active status intentionally NOT checked here: /search is a deliberate,\n  // on-demand single-company lookup, not the passive scheduled bulk search\n  // that Active is meant to gate. A company set Active=FALSE (e.g. to keep\n  // it out of noisy scheduled digests) should still be reachable via /search.\n  const name = (c.Company || '').toLowerCase();\n  return name.includes(query);\n});\n\nstaticData.matchedCompanies = matches;\n\nif (matches.length === 0) {\n  console.log(`No company found matching '${query}' in config`);\n  return [{json: {found: false, query: query, matchCount: 0}}];\n}\n\nconst names = matches.map(m => m.Company).join(', ');\nconsole.log(`Found ${matches.length} match(es) for '${query}': ${names}`);\n\nreturn [{json: {\n  found: true,\n  query: query,\n  matchCount: matches.length,\n  matchedNames: names,\n  matches: matches.map(m => ({company: m.Company, companyId: m.CompanyID, bucket: String(m.Bucket)}))\n}}];"
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\n// Config rows come from the Read Config node itself, NOT $input: Read Settings + Store Settings now sit between\n// them, so $input here is Store Settings' single status item (which made every lookup 'not found').\nconst config = $('Read Config').all().map(i => i.json);\nconst query = (staticData.companyQuery || '').toLowerCase();\n\n// If parse error, pass through with no matches\nif (staticData.parseError) {\n  staticData.matchedCompanies = [];\n  return [{json: {found: false, reason: 'parse_error'}}];\n}\n\n// Case-insensitive partial match against company names\nconst matches = config.filter(c => {\n  // Active status intentionally NOT checked here: /search is a deliberate,\n  // on-demand single-company lookup, not the passive scheduled bulk search\n  // that Active is meant to gate. A company set Active=FALSE (e.g. to keep\n  // it out of noisy scheduled digests) should still be reachable via /search.\n  const name = (c.Company || '').toLowerCase();\n  return name.includes(query);\n});\n\nstaticData.matchedCompanies = matches;\n\nif (matches.length === 0) {\n  console.log(`No company found matching '${query}' in config`);\n  return [{json: {found: false, query: query, matchCount: 0}}];\n}\n\nconst names = matches.map(m => m.Company).join(', ');\nconsole.log(`Found ${matches.length} match(es) for '${query}': ${names}`);\n\nreturn [{json: {\n  found: true,\n  query: query,\n  matchCount: matches.length,\n  matchedNames: names,\n  matches: matches.map(m => ({company: m.Company, companyId: m.CompanyID, bucket: String(m.Bucket)}))\n}}];"
       }
     },
     {
@@ -702,6 +702,7 @@
         200
       ],
       "alwaysOutputData": true,
+      "executeOnce": true,
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "CONFIGURE_ME",
