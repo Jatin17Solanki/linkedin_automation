@@ -88,7 +88,7 @@ prompt_confirmed_value() {
     while true; do
         read -rp "$prompt_label (leave blank to skip and set later): " value
         if [ -z "$value" ]; then
-            echo "Skipped -- you can set this later, see \"Updating these values later\" in SETUP_GUIDE.md."
+            echo "Skipped -- you can set this later, see \"Updating values later\" (section 5.7) in SETUP_GUIDE.md."
             break
         fi
         echo "You entered: $value"

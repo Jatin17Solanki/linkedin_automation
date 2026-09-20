@@ -21,8 +21,8 @@
  *   1. Create a new blank Google Sheet.
  *   2. Extensions -> Apps Script.
  *   3. Delete the placeholder code, paste this whole file in, save.
- *   4. (Optional) Run your resume through the prompt in the README's "Resume
- *      → Sheet" section against any LLM. It answers with ONE code block; use
+ *   4. (Optional) Run your resume through the prompt in SETUP_GUIDE.md, section
+ *      1.4 ("Your Google Sheet (and your resume)"), against any LLM. It answers with ONE code block; use
  *      that block's copy button, then paste the JSON BETWEEN THE TWO BACKTICKS
  *      of RESUME_JSON below (String.raw`PASTE HERE`). Keep the backticks —
  *      single quotes would break on JSON that spans several lines. Skip this
@@ -61,7 +61,7 @@ var RESULTS_HEADERS = [
   'PrimaryTag', 'FirstSeen', 'Notified', 'Score', 'Status'
 ];
 
-// Paste the JSON returned by the README's resume-conversion prompt BETWEEN THE
+// Paste the JSON returned by the resume-conversion prompt (SETUP_GUIDE.md 1.4) BETWEEN THE
 // BACKTICKS below to auto-populate the Resume tab from your own resume instead
 // of getting placeholder values, e.g.
 //     var RESUME_JSON = String.raw`{ "name": "...", ... }`;
