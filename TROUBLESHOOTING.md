@@ -115,6 +115,16 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Upgrading from a version where you typed the address into the `Send Gmail` node?** That value is no longer used — the node's **To** is now `{{ $json.sendTo }}`, and re-importing/updating the workflow replaces whatever you typed there. Add the Settings row.
 
+## Company Search fails with "The service is receiving too many requests" (Sheets quota exceeded)
+
+**Symptom:** `/search …` errors on a Google Sheets node with *"The service is receiving too many requests from you — Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com'"*. The node's panel also says *"This node runs multiple times, once for each input item."*
+
+**Root cause:** not an attack, and nothing to do with LinkedIn — it's Google's per-user Sheets read quota (60 read requests per minute by default), exhausted by the workflow itself. In `n8n_company_search_v1.json` the job loop's "done" output emits one item per job found and fed **`Read Resume`** directly, so a search that found K jobs read the Resume tab K times back-to-back (the main workflow avoids this with a `Trigger Read` node that collapses the items into one). A big company over a 30-day window easily finds dozens of jobs, and two or three `/search` runs inside the same minute finish off the quota. The other two Sheets nodes in this workflow (`Read Config`, `Read Settings`) are fed a single item and only ever ran once.
+
+**Fix:** `Read Resume` now has n8n's **Execute Once** setting on, so it reads the tab a single time per run. On an already-imported instance don't wait for a re-import: open `Read Resume` → **Settings** → turn on **Execute Once** (takes effect immediately). The quota window is per minute — wait about a minute before retrying the failed run.
+
+**If it still happens:** avoid firing several `/search` runs within a minute; the main workflow's scheduled runs share the same per-user quota; and you can raise the limit in Google Cloud Console → APIs & Services → Google Sheets API → Quotas.
+
 ## Clicking one node in the editor opens a different node
 
 **Symptom:** e.g. clicking `Read Settings` in the company-search workflow opens `Send Gmail`; credentials or edits seem to land on the wrong node.

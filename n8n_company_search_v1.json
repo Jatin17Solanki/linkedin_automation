@@ -494,7 +494,8 @@
           "name": "Google Sheets account"
         }
       },
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "executeOnce": true
     },
     {
       "id": "b2000001-0001-0001-0001-000000000025",

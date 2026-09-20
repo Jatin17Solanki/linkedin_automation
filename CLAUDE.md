@@ -262,6 +262,7 @@ Every "validated" check used earlier in this project (`JSON.parse`, `node --chec
 
 - **Node `id`s must be unique within the file, and so must node `name`s** (connections reference nodes by *name*). Never copy an id from another node — grep the file for an unused one.
 - **Every connection endpoint must match an existing node name.**
+- **A node fed by a loop's `done` output runs once per item.** For Google Sheets (default quota 60 read requests/min/user) that is a 429 waiting to happen on a big result set — collapse first (a Code node returning one item, like the main workflow's `Trigger Read`) or set the node's `executeOnce`. Company Search's `Read Resume` shipped without either until PR #32.
 - Edit as **text** and keep the file's CRLF endings — re-serializing with `JSON.stringify` reformats the whole file and buries the real diff.
 - Keep the sanitized placeholders (`YOUR_GOOGLE_SHEET_DOCUMENT_ID`, `CONFIGURE_ME`); never commit a live n8n export as-is.
 - Test data layouts produced by `bootstrap.gs` by simulating n8n's read (row 1 = column names), not just the parser that builds them.
@@ -497,7 +498,7 @@ Telegram Trigger (/search)
 | 23 | Format Telegram | code | Enriched format (match %, colors, `min_match_percent` suppression) or plain fallback |
 | 24 | Split Messages | code | Fans out message chunks |
 | 25 | Send Results Telegram | telegram | Sends result message(s) |
-| 26 | Read Resume | googleSheets | Reads "Resume" tab (Key/Value pairs) from same sheet |
+| 26 | Read Resume | googleSheets | Reads "Resume" tab (Key/Value pairs) from same sheet. **Execute Once is on**: `Loop Over Jobs`'s `done` output emits one item per job and feeds this node directly, so without it the tab was read once per job found (a burst of Sheets reads -> 429 "Read requests per minute per user"). The main workflow avoids the same problem with its `Trigger Read` collapse node |
 | 27 | Prepare LLM Input | code | Builds Gemini prompt with resume + job descriptions |
 | 28 | Call Gemini Flash | httpRequest | POST to Gemini 2.5 Flash API (60s timeout, continueOnFail) |
 | 29 | Parse LLM Response | code | Validates & merges match scores into jobs, sorts by match % |
