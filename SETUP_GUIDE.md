@@ -19,7 +19,7 @@ This guide takes you from nothing to a running job-search bot. If you haven't ye
   - [2C On GCP](#2c-on-gcp)
 - **[Part 3: Connect n8n to your accounts](#part-3-connect-n8n-to-your-accounts)**
 - **[Part 4: The optional workflows](#part-4-the-optional-workflows)** — [Company Search](#41-company-search-search), [Job Parser + MCP](#42-job-parser--mcp-server)
-- **[Part 5: Customizing](#part-5-customizing)** — [companies & buckets](#51-companies-and-buckets), [title filters](#52-title-filters), [location & multiple regions](#53-location-and-multiple-regions), [experience](#54-experience-range), [schedule](#55-schedule-and-time-window), [environment variables](#56-environment-variable-reference)
+- **[Part 5: Customizing](#part-5-customizing)** — [companies](#51-companies), [role and title filters](#52-role-and-title-filters), [location & multiple regions](#53-location-and-multiple-regions), [experience](#54-experience-range), [schedule](#55-schedule-and-time-window), [environment variables](#56-environment-variable-reference)
 - **[Part 6: Operations](#part-6-operations)** — [optional CI/CD](#61-optional-github-actions-cicd), [updating an existing instance](#62-updating-an-existing-instance), [costs](#63-costs), [maintenance commands](#64-maintenance-commands), [troubleshooting](#65-troubleshooting)
 
 ---
@@ -192,8 +192,8 @@ Prefer to type it yourself? Skip this step: the script fills the Resume tab with
 
 | Tab | What's in it | You'll edit it? |
 |-----|--------------|-----------------|
-| **Config** | 94 example companies with their LinkedIn IDs and search bucket | Yes — see [5.1](#51-companies-and-buckets) |
-| **Settings** | Location, experience range, minimum match %, notify email (working defaults) | Yes, any time — see [Part 5](#part-5-customizing) |
+| **Config** | 94 example companies with their LinkedIn IDs | Yes — see [5.1](#51-companies) |
+| **Settings** | The job titles you're after, location, experience range, minimum match %, notify email (working defaults for software roles) | Yes, any time — see [Part 5](#part-5-customizing) |
 | **Resume** | Your profile, from Step 1 (or placeholders) | Yes, if you skipped Step 1 |
 | **Results** | Headers only. The workflow fills this with every job it finds and remembers what it already sent you | No |
 
@@ -223,11 +223,12 @@ n8n needs permission to read and write your Sheet. Self-hosted n8n has no built-
 
 ## 1.6 Decide your search settings
 
-You don't have to finalise anything: the defaults work (Bengaluru, roles asking for up to 4 years of experience, the example company list), and every setting below is editable in your Sheet at any time, with no restart. But think about these now so you know what to change:
+You don't have to finalise anything: the defaults work (software engineering roles, Bengaluru, roles asking for up to 4 years of experience, the example company list), and every setting below is editable in your Sheet at any time, with no restart. But think about these now so you know what to change:
 
 | Decide | Where it lives | Guide |
 |--------|----------------|-------|
-| **Which companies** to watch | Sheet → **Config** tab | [5.1](#51-companies-and-buckets) |
+| **Which roles** you're after — the defaults are software engineering; **anything else, change this** | Sheet → **Settings** tab (`search_titles`, `exclude_title_words`) | [5.2](#52-role-and-title-filters) |
+| **Which companies** to watch | Sheet → **Config** tab | [5.1](#51-companies) |
 | **Which city (or cities)** | Sheet → **Settings** tab | [5.3](#53-location-and-multiple-regions) |
 | **Your experience bracket**, e.g. 3–5 years | Sheet → **Settings** tab | [5.4](#54-experience-range) |
 | **Hide low matches?** (`min_match_percent`) | Sheet → **Settings** tab | [5.6](#56-environment-variable-reference) |
@@ -470,7 +471,8 @@ First, know what a run with no changes does, so the result makes sense:
 | Location | Bengaluru, Karnataka | Settings tab — [5.3](#53-location-and-multiple-regions) |
 | Max experience required | 4 years | Settings tab — [5.4](#54-experience-range) |
 | Minimum match % shown | none (everything shown) | Settings tab — `min_match_percent` |
-| Companies searched | Every Config row with `Active = TRUE` | Config tab — [5.1](#51-companies-and-buckets) |
+| Roles searched | Software engineering titles; staff/manager/QA/devops-type titles excluded | Settings tab — [5.2](#52-role-and-title-filters) |
+| Companies searched | Every Config row with `Active = TRUE` | Config tab — [5.1](#51-companies) |
 
 Because the window is only 24 hours, a first run can easily return **zero jobs** just because nobody you follow posted a matching Bengaluru role in the last day. That is normal, not a broken setup. To prove the pipeline end to end, widen the window for the test (below).
 
@@ -555,13 +557,13 @@ The project ships two more workflows. They were imported alongside the main one 
 
 Almost everything you'd want to tweak lives in your Google Sheet, so you can change it from a browser with **no restart**. The few things that don't are called out.
 
-## 5.1 Companies and buckets
+## 5.1 Companies
 
 ### Editing the Config tab
 
-Open your Sheet → **Config** tab. Columns: `Company | CompanyID | Bucket | Active | Notes`.
+Open your Sheet → **Config** tab. Columns: `Company | CompanyID | Active | SearchTitles | ExtraExcludeWords | Notes`.
 
-- **Add a company:** a new row with the company name, its LinkedIn ID, a bucket (1–4), and `Active = TRUE`.
+- **Add a company:** a new row with the company name, its LinkedIn ID and `Active = TRUE`. Leave `SearchTitles` and `ExtraExcludeWords` **blank** — blank means "use my normal role filters" ([5.2](#52-role-and-title-filters)).
 - **Pause a company:** set `Active = FALSE`. This only affects the **scheduled** Job Search. Company Search (`/search`) ignores `Active` — a deliberate lookup isn't blocked by the flag that controls passive digests.
 - **Remove:** delete the row.
 
@@ -570,35 +572,101 @@ Open your Sheet → **Config** tab. Columns: `Company | CompanyID | Bucket | Act
 **Adding a company, step by step**
 
 1. Get its `CompanyID` as above.
-2. In the Config tab add a row at the bottom: **Company** (the name — `/search` matches against this text), **CompanyID** (the number), **Bucket** (**4** unless you know better — next section), **Active**, **Notes** (anything you like).
+2. In the Config tab add a row at the bottom: **Company** (the name — `/search` matches against this text), **CompanyID** (the number), **Active**, and **Notes** (anything you like). Leave the two title columns blank.
 3. **Active**: `TRUE` includes it in the scheduled digest; `FALSE` keeps it out of the digest but still available to `/search`.
 4. That's it — it takes effect on the next run, no restart. To add many at once, paste several rows under the existing ones (keep the header row).
 
-### What the buckets are, and why they exist
+## 5.2 Role and title filters
 
-Companies name the same level differently, and one search phrase can't fit them all. A "bucket" is just a group of companies that share a title convention, so each group gets a search phrase (and a "senior" rule) that suits it:
+This decides **which jobs you're looking for**. It's two cells in the **Settings** tab, and the defaults are for **software engineering** roles. If you're after anything else — finance, analytics, product, design — this is the one thing you must change.
 
-| Bucket | Searches for titles like… | Excludes "senior"? | Why | Example companies |
-|:---:|---|:---:|---|---|
-| **1** | "SDE II", "SDE 2", "Software Engineer II" | **Yes** | These companies call mid-level *SDE II*; "Senior" is the *next* level up, which you don't want | Amazon, Flipkart, Expedia, Microsoft, Groww |
-| **2** | "Software Engineer III", "Level 3" | **Yes** | Same idea, with a numeric level system | Oracle, Google, Walmart, eBay |
-| **3** | Generic: "software engineer", "backend engineer", "MTS", … plus "Senior Member, Tech" | **No** | Some large companies use **"Senior"** for what is really a mid-level role (Myntra, PayPal, MakeMyTrip), so excluding it would silently drop real matches | Adobe, Salesforce, Myntra, PayPal, Apple, Meta, Uber |
-| **4** | Generic: "software engineer", "backend engineer", "MTS", … | **No** | The catch-all for everyone else | Atlassian, Nvidia, Swiggy, Cred, Kotak, … |
+| Settings key | What it does | Default |
+|---|---|---|
+| `search_titles` | The job titles LinkedIn is **asked for**. A job is found if its posting mentions **any** of them. | `software engineer, software developer, backend engineer, SDE, MTS, member of technical staff` |
+| `exclude_title_words` | Words that **throw a job away** when they appear in its **title**. | `staff, principal, lead, manager, director, ios, android, machine learning, data science, data scientist, QA, SDET, devops, SRE, site reliability, frontend, front end, intern, internship, test engineer, test automation, platform engineer, infra engineer, cloud engineer, security, mobile, embedded` |
 
-> **Rule of thumb: put any new company in Bucket 4.** It's the broadest search and it doesn't exclude "senior", so it won't wrongly throw away roles at a company whose title conventions you don't know — and the experience filter ([5.4](#54-experience-range)) still screens out roles that ask for more experience than you have. Move a company to 1, 2 or 3 only once you know how it titles its mid-level engineers. **The Bucket cell must be 1, 2, 3 or 4** — any other value means that company is silently skipped.
+**How to write them**
 
-## 5.2 Title filters
+- A **comma-separated list** of plain words or phrases: `financial analyst, FP&A analyst`. No quotes, no `OR`/`AND`, no wildcards — the workflow turns the list into LinkedIn's search syntax for you.
+- **Capital letters don't matter.**
+- **Exclude words match whole words only:** `lead` removes "Lead Engineer" but not "Leading". A phrase matches as a phrase: `test engineer` removes "Test Engineer" but not "Test Automation Engineer" (list that separately).
+- **A space also matches a hyphen or no space:** `front end` removes "Front End", "Front-End" and "Frontend".
+- **Blank means the default.** Leaving a cell empty (or deleting the row) brings the default above back; it does *not* switch the filter off.
+- Changes apply on the **next run**, no restart. Both workflows (the scheduled digest and `/search`) use the same two cells.
 
-Two layers decide which job titles you see. Both are plain JavaScript inside n8n Code nodes — deliberately not a Sheet setting, to keep them simple — so you edit them in the node.
+### Why both are needed
 
-| Layer | What it does | Node — main workflow | Node — Company Search |
-|-------|--------------|----------------------|------------------------|
-| **Search phrases** per bucket | What LinkedIn is asked for | **Build Search URLs** (the `bucketKeywords` object) | **Build Search URL** |
-| **Negative title filter** | Drops results after they come back | **Filter & Accumulate Links** (`negativeBase`, `negativeSenior`) | **Filter Links** |
+- **Search titles keep a run small.** Without them LinkedIn would return *every* job at every company in your list — thousands of postings — and each one the workflow keeps has to be opened and read one at a time. A run would take hours and LinkedIn would start refusing requests.
+- **Exclude words catch what the search lets through.** LinkedIn matches your titles *anywhere* in a posting, not just in the title, so a search for "software engineer" also brings back "Staff Software Engineer", "Engineering Manager" or "Data Engineer". Exclude words drop those by title, cheaply, before any job page is opened.
+- **They work even when the AI doesn't.** Gemini scores what's left, but it's a free service that is sometimes unavailable. When it is, your digest arrives without scores — and these two filters are what still keep unrelated jobs out of it.
 
-The negative filter drops any title containing these whole words (case-insensitive): `staff, principal, lead, manager, director, ios, android, machine learning, data science, QA, SDET, devops, SRE, site reliability, frontend, front-end, intern, test engineer, test automation, platform engineer, infra engineer, cloud engineer, security, mobile, embedded`. Buckets **1 and 2 additionally** drop `senior` and `sr`. (That is how "senior" is excluded for buckets 1 and 2 — it's this second rule, not the search phrase.)
+### Example: looking for a finance role
 
-**To change it:** open the node, find the line `const negativeBase = /\b(staff|principal|…)\b/i;` and add or remove words separated by `|`. **Edit the same line in both workflows** (main *and* Company Search) — the logic is intentionally duplicated rather than shared, so editing one makes the two disagree about what counts as a match. If you keep your own fork, make the same edit in `n8n_job_search_v1.json` and `n8n_company_search_v1.json`.
+| Settings key | Value |
+|---|---|
+| `search_titles` | `financial analyst, finance analyst, FP&A analyst, finance associate` |
+| `exclude_title_words` | `intern, internship, director, vice president, head` |
+
+Replace the exclude list rather than adding to it: the default is written for software roles, and a word like `manager` would wrongly remove mid-level finance titles such as "Assistant Manager – Business Finance". Then set `min_experience_years` / `max_experience_years` ([5.4](#54-experience-range)) and put your own resume in the Resume tab so the AI scores against it.
+
+**Tip:** start broad, look at one digest, then tighten. If a run finds nothing at all, your search titles are probably too narrow — try the words the companies you follow actually use in their job titles.
+
+### When a company names the role differently (optional)
+
+Most people can stop above. This part is for when one company's job titles don't fit your list.
+
+The same level of role has different names at different companies. A mid-level software engineer is "SDE II" at Amazon, "Software Engineer III" at Google, "Member of Technical Staff" at Salesforce — and at Amazon "Senior" is the level *above* the one you may want, while at Myntra "Senior" is often mid-level. One list can't be right for all of them.
+
+For those companies, use the two optional columns in the **Config** tab, on that company's own row:
+
+| Column | Effect for that company | Blank |
+|---|---|---|
+| `SearchTitles` | **Replaces** `search_titles` | Uses `search_titles` from Settings |
+| `ExtraExcludeWords` | **Adds to** `exclude_title_words` (the Settings list still applies) | Only the Settings list applies |
+
+Example:
+
+| Company | CompanyID | Active | SearchTitles | ExtraExcludeWords |
+|---|---|---|---|---|
+| Amazon | 1586 | TRUE | `SDE II, SDE 2, software engineer II` | `senior, sr` |
+| Google | 1441 | TRUE | `software engineer III, software engineer 3` | `senior, sr` |
+| Swiggy | 9252341 | TRUE | *(blank)* | *(blank)* |
+
+Amazon and Google are searched with their own titles, and "Senior …" roles there are dropped; Swiggy uses your normal Settings. Same rules as above: comma-separated, capitals don't matter, write the same text into every company that should be treated the same way.
+
+### How many LinkedIn searches a run makes
+
+You don't manage this, but it explains the log. Companies whose `SearchTitles` **and** `ExtraExcludeWords` are identical (including all the blank ones) are searched **together**, up to **25 companies per search**. Each search reads at most 300 results, so splitting a long company list keeps busy days from running into that limit.
+
+- The 94-company starter list with blank title columns → **4 searches** (25 + 25 + 25 + 19).
+- Each *different* combination you type adds at least one search. Copy the exact same text into companies that belong together; two slightly different lists (`SDE II, SDE 2` vs `SDE 2, SDE II, SDE-II`) become two searches. That costs a little time, nothing more.
+
+To see it for a run: open the execution in n8n and click **Build Search URLs** — each output item is one search, labelled like `#2 default titles, 25 companies (DoorDash, FareHarbor, Gitlab +22)`.
+
+### Upgrading a Sheet that has a Bucket column
+
+Older versions grouped companies into numbered **buckets** (1–4) with the search titles hidden in the workflow. The `Bucket` column now does nothing — every company without its own `SearchTitles` uses the Settings list. While a `Bucket` column is present without the two new columns, every output item of **Build Search URLs** carries a `configNote` saying so.
+
+To keep what the buckets did:
+
+1. **Before updating the workflows**, add two columns to the Config tab with exactly these headers: `SearchTitles` and `ExtraExcludeWords` (any position; the workflow finds columns by their header in row 1).
+2. Fill them from each row's bucket. (Tip: Data → Create a filter, filter `Bucket` by one number, paste into the visible rows, repeat.)
+
+   | Bucket | SearchTitles | ExtraExcludeWords |
+   |:---:|---|---|
+   | 1 | `software development engineer, SDE, SDE II, SDE 2, SDE-II, software engineer II, software engineer 2, software engineer - II` | `senior, sr` |
+   | 2 | `software engineer III, software engineer 3, software developer 3` | `senior, sr` |
+   | 3 | `software engineer, software developer, backend engineer, SDE, MTS, member of technical staff, Senior Member Tech` | *(blank)* |
+   | 4 | *(blank)* | *(blank)* |
+
+3. Add the two Settings rows `search_titles` and `exclude_title_words` with the defaults from the table at the top of this section (or leave them out — blank means the same defaults).
+4. Update the workflows ([6.2](#62-updating-an-existing-instance)), check a run, then delete the `Bucket` column.
+
+Keep the `Bucket` column until the workflows are updated — the older workflow still reads it, and without it every company would be skipped.
+
+### The tag in your messages
+
+Each job in the digest ends with a tag in brackets, e.g. `(SDE II)` or `(financial analyst)`. It's the **longest of the search titles** (yours, or that company's `SearchTitles`) that appears in the job's title, matched the same way as exclude words. `(Other)` means none of them appears in the title — LinkedIn found the job because the phrase was elsewhere in the posting, which is worth a second look. The same value is saved in the Results tab's `PrimaryTag` column.
 
 ## 5.3 Location and multiple regions
 
@@ -698,7 +766,7 @@ The times are read in the timezone set by `GENERIC_TIMEZONE` (and `TZ`) in the c
 
 To change the *default* 24 hours, edit `86400` (seconds) in **Build Search URLs** — `const TIME_WINDOW_SECONDS = staticDataForTime.customTimeWindow || 86400;` — e.g. `43200` = 12 h. (Company Search is different: it takes **days**, e.g. `/search Oracle 30`.)
 
-**Long windows and paging.** LinkedIn returns results 10 at a time, so each search reads page after page until it runs out — up to **30 pages (300 results) per company group** per run, with the wait between requests you already have. If a window is so wide that the cap is hit, the run's log says `WARNING: bucket N reached the 30-page cap` and older results are skipped: shorten the window (or, for Company Search, use fewer days).
+**Long windows and paging.** LinkedIn returns results 10 at a time, so each search reads page after page until it runs out — up to **30 pages (300 results) per search** per run, with the wait between requests you already have (a search covers up to 25 companies — [5.2](#how-many-linkedin-searches-a-run-makes)). If a window is so wide that the cap is hit, the run's log says `WARNING: search #N … reached the 30-page cap` and older results are skipped: shorten the window (or, for Company Search, use fewer days).
 
 ## 5.6 Environment variable reference
 
@@ -717,6 +785,8 @@ Change these in the Sheet any time. **Precedence: Settings tab value (if not bla
 | `max_experience_years` | `MAX_EXPERIENCE_YEARS` | `4` | [5.4](#54-experience-range) |
 | `min_match_percent` | `MIN_MATCH_PERCENT` | `0` (show all) | Hide jobs scoring below this % from the **Telegram message** only. They're still saved to Results and marked as sent, so they're never re-scored. Not applied when AI scoring failed (nothing to compare) |
 | `notify_email` | *(none — Sheet only)* | *(blank: no email)* | Company Search's email recipient(s) — [4.1](#41-company-search-search) |
+| `search_titles` | *(none — Sheet only)* | software engineering titles | The job titles LinkedIn is asked for — [5.2](#52-role-and-title-filters) |
+| `exclude_title_words` | *(none — Sheet only)* | staff, manager, QA, devops, … | Title words that drop a job — [5.2](#52-role-and-title-filters) |
 
 Both workflows read the same Settings tab, so they always agree.
 

@@ -43,7 +43,7 @@ The workflows are big JSON files, and the validation most people reach for (`JSO
 - **A node runs once per input item, and a Google Sheets read emits one item per *row*.** Something wired after a multi-row read or after a loop's `done` output runs that many times — a recipe for Google's per-minute quota errors. Collapse to one item first, or set *Execute Once*.
 - **Adding a node in the middle of a chain changes the input of everything after it.** Re-check every downstream node that reads `$input`; prefer `$('Node Name')`.
 - **Edit as text and keep the file's CRLF line endings,** or the diff becomes unreadable. For the two main workflows, parsing the file, editing the object, and writing it back with `JSON.stringify(obj, null, 2)` converted to CRLF reproduces them byte for byte, so a small edit stays a small diff — check `git diff --stat` before committing. (The small job-parser file isn't formatted that way: edit it as text.)
-- **The filtering logic is duplicated on purpose** between `n8n_job_search_v1.json` and `n8n_company_search_v1.json` (title filters, bucket keywords, experience and location checks, URL building, paging). Change both, or they silently disagree.
+- **The filtering logic is duplicated on purpose** between `n8n_job_search_v1.json` and `n8n_company_search_v1.json` (title-filter defaults, grouping/batching and matching, experience and location checks, URL building, paging, the tag). Change both, or they silently disagree.
 
 After editing, run this and expect `true` / `0` everywhere:
 

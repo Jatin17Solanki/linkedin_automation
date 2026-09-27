@@ -51,9 +51,9 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Symptom:** The Telegram send node fails with a 400 error mentioning entity parsing, usually when a job title contains an underscore, asterisk, or square brackets.
 
-**Root cause:** `parse_mode` (Markdown) was enabled on the Telegram node, and dynamic job-title text sometimes contains characters Telegram's Markdown parser treats as unclosed formatting.
+**Root cause:** a Telegram node's `parse_mode` makes Telegram interpret the message as Markdown or HTML, and dynamic text (job titles, company names, your own search titles, which become the tag in brackets) can contain characters that format doesn't allow unescaped.
 
-**Fix:** Don't set `parse_mode` on the Send Telegram nodes. Two extra mitigations are already baked into the workflow's Code nodes: a `safe()` helper strips `_`/`*` from dynamic text before it's inserted into messages, and tags use `(SDE-II)` parentheses instead of `[SDE-II]` square brackets, since `[...]` triggers Markdown's link-entity parsing even without `parse_mode` in some clients.
+**Fix:** leave the Telegram nodes' `parse_mode` as shipped. The job bot's **Send Telegram** uses **HTML**, and `Format Telegram`'s `safe()` escapes `&`, `<` and `>` in every dynamic field, including the tag — so a search title like `FP&A analyst` is safe. Company Search's **Send Results Telegram** uses no parse mode, and its `safe()` strips `_`/`*`. Tags use `(…)` parentheses, not `[…]`. If you switch a node to Markdown, or add a dynamic field to a message without `safe()`, this error comes back.
 
 ## `docker pull` from GHCR fails with "denied" / "not found" for a public repo
 
@@ -171,9 +171,28 @@ A 2GB swapfile on the VM's disk is the other half of this fix — see `deploy/MI
 
 **Symptom:** `/jobs 168` or `/search Google 90` returns far fewer openings than LinkedIn shows for the same search.
 
-**Root cause:** each search group is read page by page (10 results per request) up to a cap of **30 pages = 300 results**, to keep a single run bounded. Before 2026-09 the workflows read only one page (about 60 results) and had no way to go further; the cap is now 300, and the run's log prints `WARNING: bucket N reached the 30-page cap` when it is hit.
+**Root cause:** each LinkedIn search (up to 25 companies — [SETUP_GUIDE 5.2](SETUP_GUIDE.md#how-many-linkedin-searches-a-run-makes)) is read page by page (10 results per request) up to a cap of **30 pages = 300 results**, to keep a single run bounded. The run's log prints `WARNING: search #N … reached the 30-page cap` when it is hit. Before 2026-09 the workflows read only one page (about 60 results), and until the Sheet-driven title filters all "generic" companies (68 in the starter list) shared one search and therefore one 300-result cap.
 
-**Fix:** use a shorter window, or split the busiest group: a bucket with many companies (Bucket 4 in the starter list has 68) fills the cap fastest. The cap is `MAX_PAGES` in the `Filter & Accumulate Links` node (`Filter Links` in Company Search). An instance imported before this change still has the old one-page behavior — see the "fix isn't applying" entry above.
+**Fix:** use a shorter window, or a narrower `search_titles` list. The batch size is `BATCH_SIZE` in `Build Search URLs` (`Build Search URL` in Company Search) and the cap is `MAX_PAGES` in `Filter & Accumulate Links` (`Filter Links`). An instance imported before these changes still has the old behavior — see the "fix isn't applying" entry above.
+
+## No jobs (or the wrong kind of jobs) after changing `search_titles`
+
+**Symptom:** after editing `search_titles` / `exclude_title_words` in the Settings tab, runs find nothing, or keep sending roles you don't want.
+
+**Root cause and fix**, by what the run shows. Open the execution in n8n and click `Filter & Accumulate Links` (`Filter Links` in Company Search): each output item is one page of one search, with `total` (job cards LinkedIn returned), `filtered` (dropped by an exclude word) and `new` (kept; called `added` in Company Search).
+
+- **`total` is 0 on every search:** LinkedIn found nothing for those titles at those companies in that window. The titles are probably too narrow or not what these companies use — look at a few real postings and copy their wording, or widen the window once (`/jobs 72`) to check.
+- **`total` is high but `filtered` takes almost all of it:** an exclude word is too broad for your field. The defaults are written for software roles; `manager`, `lead`, `security` and similar drop legitimate titles elsewhere. Replace the list rather than adding to it ([SETUP_GUIDE 5.2](SETUP_GUIDE.md#example-looking-for-a-finance-role)).
+- **Unwanted roles get through:** LinkedIn matches your titles anywhere in a posting, not only in the title. Add the unwanted title's distinctive word to `exclude_title_words`. A tag of `(Other)` in the digest marks exactly these: none of your titles appears in the job's title.
+- **Nothing changed at all:** row 1 of the Settings tab must be literally `Key` / `Value` (see "Settings/Resume tab values silently ignored" above), and the key names must be spelled exactly `search_titles` and `exclude_title_words`. A blank value means "use the default", not "no filter".
+
+## "Bucket is no longer used" (`configNote` on Build Search URLs)
+
+**Symptom:** the output items of `Build Search URLs` carry `configNote: "The Config tab has a Bucket column but no SearchTitles / ExtraExcludeWords columns…"`, and company-specific searches (e.g. "SDE II" at Amazon) seem to have stopped.
+
+**Root cause:** your Config tab predates the Sheet-driven title filters. The workflow no longer reads `Bucket`; every company is now searched with the Settings tab's `search_titles` unless its own `SearchTitles` cell is filled.
+
+**Fix:** add the `SearchTitles` and `ExtraExcludeWords` columns and fill them from each row's old bucket — the exact values are in [SETUP_GUIDE 5.2, "Upgrading a Sheet that has a Bucket column"](SETUP_GUIDE.md#upgrading-a-sheet-that-has-a-bucket-column). Then delete the `Bucket` column.
 
 ## The update script printed "No existing workflow found. Creating new..." and stopped
 
