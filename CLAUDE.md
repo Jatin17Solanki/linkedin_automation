@@ -8,11 +8,11 @@ This file is both the technical reference and the briefing for an AI assistant h
 2. **What you cannot do for them:** create cloud/Google/Telegram accounts, talk to @BotFather, click through OAuth consent, or operate the n8n web UI. Tell them exactly what to click and where each value goes. **Never ask them to paste secrets** (bot tokens, API keys, OAuth Client Secret) into the chat.
 3. **Debugging:** ask for the actual failing data — the n8n execution output / error text, or `docker compose logs` — before naming a root cause, and reproduce with the real workflow code rather than only reading it. Past bugs here (duplicate node ids, a node reading the wrong input, a Sheets read fanning out) all looked like something else at first.
 4. **Where things are:** `README.md` (human landing page), `SETUP_GUIDE.md` (walkthrough), `TROUBLESHOOTING.md` (known problems), `CONTRIBUTING.md` (rules for changes), `BACKLOG.md` (planned work, unverified claims, what will rot first — check it before proposing new work), this file (reference), `n8n_*.json` (the three workflows), `examples/google-sheet/` (bootstrap script + templates), `deploy/` (VM scripts), `mcp-server/`.
-5. **Changing the workflows:** read "Editing workflow JSON — agent checklist" and "Title/Seniority Filters — agent instructions" below first. Logic is deliberately duplicated between the two main workflows, so edit both. `main` is branch-protected: work on a branch and open a PR.
+5. **Changing the workflows:** read "Editing workflow JSON — agent checklist" and "Title filters — agent instructions" below first. Logic is deliberately duplicated between the two main workflows, so edit both. `main` is branch-protected: work on a branch and open a PR.
 6. Keep `README.md`, `SETUP_GUIDE.md` and this file consistent when behaviour changes. `README.md` is for humans — keep agent-level detail out of it.
 
 ## What This Is
-An n8n automation workflow (`n8n_job_search_v1.json`) that searches LinkedIn's public job pages for target companies in **Bengaluru**, filters results by experience level, logs to Google Sheets, and sends Telegram notifications. Defaults target mid-level backend/full-stack roles (about 3.5 years' experience) in Bengaluru; location, experience range and companies are all configurable (see below).
+An n8n automation workflow (`n8n_job_search_v1.json`) that searches LinkedIn's public job pages for target companies in **Bengaluru**, filters results by experience level, logs to Google Sheets, and sends Telegram notifications. Defaults target mid-level backend/full-stack roles (about 3.5 years' experience) in Bengaluru; the roles (title filters), location, experience range and companies are all configurable from the Sheet (see below).
 
 ## File Locations
 - **Main workflow:** `n8n_job_search_v1.json` — scheduled job search with LLM resume matching (43 functional nodes + 5 sticky notes)
@@ -28,16 +28,16 @@ Schedule (8×/day — 7, 9:30, 11:30, 14, 16, 18, 20, 22 IST; 24h window)
   OR Telegram Trigger (/jobs N) ← production (needs HTTPS)
         → Parse Hours → Is Jobs Command? — anything that is not /jobs [hours] gets a usage reply (Send Usage Telegram) and STOPS; it must not start a run
     ↓
-  → Read Config (Google Sheet "Config" tab — list of companies + buckets)
+  → Read Config (Google Sheet "Config" tab — companies, plus optional per-company SearchTitles / ExtraExcludeWords)
   → Store Config (saves config to workflow static data)
   → Read Results (Google Sheet "Results" tab — for dedup)
-  → Build Search URLs (Code node — builds LinkedIn URLs per bucket, Bengaluru location filter)
+  → Build Search URLs (Code node — groups companies with identical title filters, batches of ≤25 per search, Bengaluru location filter)
   → Loop Over URLs
     → Wait Between Searches (rate limit)
     → Fetch Search Page (HTTP GET to LinkedIn's guest search endpoint — one page of 10 per request)
     → Extract Links & Titles (HTML parse)
-    → Filter & Accumulate Links (Code — negative title filter + dedup + paging decision)
-    → More Pages? (IF) — yes: Next Page URL → back to Wait Between Searches (max 30 pages / 300 results per bucket); no: next bucket
+    → Filter & Accumulate Links (Code — exclude-word title filter + dedup + paging decision)
+    → More Pages? (IF) — yes: Next Page URL → back to Wait Between Searches (max 30 pages / 300 results per search); no: next search
   → Output New Job Links
   → Loop Over Jobs
     → Wait Between Jobs (rate limit)
@@ -71,40 +71,47 @@ Schedule (8×/day — 7, 9:30, 11:30, 14, 16, 18, 20, 22 IST; 24h window)
 
 **Note:** The Telegram Trigger node is shipped **disabled**. Enable it after deploying to a cloud instance with HTTPS. On cloud, Telegram uses webhook push (zero CPU when idle), not polling.
 
-## 4 Search Buckets
+## Title filters (what roles are searched)
 
-| Bucket | Title Pattern | Negative "senior" filter? | Companies |
-|--------|--------------|---------------------------|-----------|
-| 1 | SDE II / Software Engineer II | YES — excludes "senior" | Akamai(3925), Amazon(1586), Expedia(2751), Flipkart(321062), Groww(10813156), Microsoft(1035), Rippling(17988315), Slice(30246063), Wayfair(19857), Zeta(10355561) |
-| 2 | Level 3 / III | YES — excludes "senior" | eBay(1481), Google(1441), Oracle(1028), Walmart Global Tech India(9390173) |
-| 3 | Generic (Large Tech) | NO — allows "senior" (Myntra/PayPal/MMT use "Senior" for mid-level) | Adobe(1480), Apple(162479), Databricks(3477522), LinkedIn(1337), MakemyTrip(35113), Meta(10667), Myntra(361348), Netflix(165158), PayPal(1482), PhonePe(10479149), Salesforce(3185), Uber(1815218) |
-| 4 | Generic (Others) | NO — allows "senior" | 68 companies in the starter list (Atlassian, Nvidia, Airbnb, Stripe, Swiggy, Cred, …) — see `examples/google-sheet/config_data.csv` |
+Two Settings-tab keys decide the role, for **both** workflows, and two optional Config-tab columns override them per company. Defaults are software-engineering titles.
 
-The table shows the starter Config tab (`examples/google-sheet/config_data.csv`, 94 companies, all `Active=TRUE`); each user edits their own Config tab.
+| Where | Key / column | Meaning | Blank |
+|---|---|---|---|
+| Settings | `search_titles` | Comma-separated titles; the workflow builds LinkedIn's `keywords` as `"a" OR "b" OR …` | built-in default (`software engineer, software developer, backend engineer, SDE, MTS, member of technical staff`) |
+| Settings | `exclude_title_words` | Comma-separated words/phrases; a job card whose **title** contains one (whole word, case-insensitive, space = hyphen/no space) is dropped before its detail page is fetched | built-in default (staff, principal, lead, manager, director, ios, android, machine learning, data science, data scientist, QA, SDET, devops, SRE, site reliability, frontend, front end, intern, internship, test engineer, test automation, platform engineer, infra engineer, cloud engineer, security, mobile, embedded) |
+| Config | `SearchTitles` | **Replaces** `search_titles` for that company | uses `search_titles` |
+| Config | `ExtraExcludeWords` | **Added to** `exclude_title_words` for that company | only `exclude_title_words` |
+
+Settings-only (no env var), like `notify_email`. Blank means default, never "no filter". The built-in defaults live in `Build Search URLs` / `Build Search URL` and must stay identical to `examples/google-sheet/settings_template.csv`.
+
+**Grouping and batching (`Build Search URLs`):** companies whose effective titles and extra excludes are identical (compared case-insensitively, order-independent) form one group; each group is split into batches of `BATCH_SIZE = 25`; one LinkedIn search (URL item) per batch. Each URL item carries `searchLabel`, `targetTitles`, `excludeWords`, `companyCount` (and `configNote` when the Config tab still has a `Bucket` column but none of the new columns). `Filter & Accumulate Links` reads the exclude words from `$('Loop Over URLs')`, so they apply to every page of that search; `Next Page URL` passes the whole item through. Starter list with blank overrides → 4 searches (25/25/25/19).
+
+**Why this replaced the four buckets (2026-09-27):** buckets 1–4 hardcoded tech-only search phrases in the Code nodes, so a non-software user had to edit JavaScript in two workflows. Measured live the same day: one search over all 94 companies at a 72h window hit the 300-result cap, while the same companies in batches of 25 returned 487 distinct jobs — batching also removes a silent-loss problem. LinkedIn matches a quoted phrase loosely and anywhere in the posting (a "software engineer" search also returns "Data Engineer", "Financial Model Engineer"), which is why the exclude list is required. The four old buckets map to override values listed in `SETUP_GUIDE.md` 5.2 ("Upgrading a Sheet that has a Bucket column"); bucket 3's `"Senior Member, Tech"` became `Senior Member Tech` (a comma can't live in a comma list; a live comparison found the same target roles).
+
+**Tag (`PrimaryTag`):** `Process & Filter Job` / `Process Job` set it to the longest of the search's `targetTitles` that appears in the job title (same whole-word matching), else `Other` — `Other` means LinkedIn matched the phrase elsewhere in the posting.
+
+**Known quirk (decision pending, BACKLOG #6):** default searches include "member of technical staff" but default excludes include `staff`, so "Member Technical Staff II"-style titles are found then dropped. Same as before the change.
 
 ## LinkedIn URL Construction
 
-Each bucket generates a URL like:
+Each search (a batch of ≤25 companies sharing title filters) generates a URL like:
 ```
 https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=<encoded_boolean_query>&f_C=<company_ids>&f_TPR=r<seconds>&location=India&geoId=102713980&f_PP=105214831&sortBy=DD&start=<n>
 ```
 
-**Why the guest endpoint and paging (measured 2026-09-20):** the public `/jobs/search/` page returns at most 60 cards and cannot be paged by guests (`start=25` gets a login redirect, HTTP 303), so results beyond the newest 60 per bucket were silently never seen. The guest endpoint above returns a bare `<li>` list, **10 cards per request**, and pages with `start=0,10,20,…`; a short page is the last one. The workflows keep requesting pages while a page is full, up to `MAX_PAGES = 30` (300 results) per bucket, logging a `WARNING` if the cap is hit. Paging state (`searchStart`/`searchPages`) lives in static data and is reset by `Build Search URLs` / `Build Search URL` each run. The HTML node's selectors therefore have no `ul.jobs-search__results-list` prefix.
+**Why the guest endpoint and paging (measured 2026-09-20):** the public `/jobs/search/` page returns at most 60 cards and cannot be paged by guests (`start=25` gets a login redirect, HTTP 303), so results beyond the newest 60 per search were silently never seen. The guest endpoint above returns a bare `<li>` list, **10 cards per request**, and pages with `start=0,10,20,…`; a short page is the last one. The workflows keep requesting pages while a page is full, up to `MAX_PAGES = 30` (300 results) per search, logging a `WARNING` (container logs only) if the cap is hit. Paging state (`searchStart`/`searchPages`) lives in static data and is reset by `Build Search URLs` / `Build Search URL` each run. The HTML node's selectors therefore have no `ul.jobs-search__results-list` prefix.
 
 - `f_TPR=r<seconds>` = time window (e.g., `r86400` = 24 hours)
 - `f_C` = comma-separated LinkedIn company IDs
 - `geoId=102713980` = India (broad geo) — default, overridable via the Settings tab's `location_geo_id` or the `LOCATION_GEO_ID` env var
 - `f_PP=105214831` = **Bengaluru, Karnataka** (precise location filter) — default, overridable via the Settings tab's `location_f_pp` or the `LOCATION_F_PP` env var; accepts a comma-separated list of place IDs for multi-city (OR-matched) — see `SETUP_GUIDE.md` §5.3 ("Location and multiple regions") for known place IDs
-- Keywords use Boolean: `"SDE II" OR "SDE 2" OR ...`
-- The bucket keyword templates (`bucketKeywords` in `Build Search URLs`) are plain `OR` lists of title phrases — there is **no** `AND NOT` in the URL. The "senior" exclusion for buckets 1 & 2 happens *after* the fetch, via the `negativeSenior` regex in `Filter & Accumulate Links` / `Filter Links` (see Filters below)
-- Buckets 3 & 4: only the `negativeBase` regex (staff/manager/etc.) applies, NOT senior. Bucket 3 has one extra keyword, `"Senior Member, Tech"`. A company whose Bucket cell is not 1-4 is silently skipped (`Build Search URLs` has no keywords for it)
+- Keywords use Boolean `OR`, built from the title list: `"SDE II" OR "SDE 2" OR ...`
+- There is **no** `AND NOT` in the URL: exclusions happen *after* the fetch, on the job-card titles, in `Filter & Accumulate Links` / `Filter Links` (see "Title filters" above). A company with a blank `CompanyID` is skipped with a log line
 
 ## Filters
 
-### Negative Title Filters (in "Filter & Accumulate Links" node)
-Applied to all buckets: staff, principal, lead, manager, director, ios, android, machine learning, data science, QA, SDET, devops, SRE, frontend, intern, test engineer, platform engineer, infra engineer, cloud engineer, security, mobile, embedded
-
-Additionally for Buckets 1 & 2 only: senior, sr.
+### Title Filter (in "Filter & Accumulate Links" node)
+Drops a job card whose title contains any of the search's `excludeWords` (Settings `exclude_title_words` + the company's `ExtraExcludeWords`) as a whole word/phrase, case-insensitive, with a space in a phrase also matching a hyphen or no space. See "Title filters" above. (The old hardcoded regex never matched "data science/scientist", "test automation" or "internship", because `data.?scien` / `test.?auto` sat inside `\b…\b`; the new default list names them explicitly.)
 
 ### Location Filter (in "Process & Filter Job" node)
 - Skips any job whose parsed location doesn't contain any of the `LOCATION_CITY_NAMES` substrings (default: "bengaluru", "bangalore", "karnataka"; case-insensitive), driven by `$env.LOCATION_CITY_NAMES` (comma-separated) with the default as fallback
@@ -125,12 +132,12 @@ Regex: `/-(\d{8,})(?:\?|$)/` — extracts the numeric job ID from LinkedIn URLs 
 ## Google Sheet Schema
 
 **Config tab** (`gid=0`, input — user editable):
-| Company | CompanyID | Bucket | Active | Notes |
+| Company | CompanyID | Active | SearchTitles (optional) | ExtraExcludeWords (optional) | Notes |
 
 **Results tab** (`gid=812188810`, output — workflow writes here):
 | JobID | Title | Company | Location | Link | ExperienceReq | PrimaryTag | FirstSeen | Notified | Score | Status |
 
-**Settings tab** (Key/Value, input — user editable, read live every run): a Google-Sheet-native override for the location/experience/match-threshold env vars, so they can be changed without a container restart. **Row 1 must be literally `Key` and `Value`** (exact spelling/case) — if your first data pair ends up in row 1 instead, n8n reads it as the header row and every setting silently falls back to its env var/default (see `TROUBLESHOOTING.md`; `Store Settings` logs a warning when this happens). Precedence for each: **Settings tab value (if non-blank) > matching env var > hardcoded default.** Read by `Read Settings` → `Store Settings` (populates `staticData.settings`), consumed in `Build Search URLs` (`location_geo_id`, `location_f_pp`) and `Process & Filter Job` (`max_experience_years`, `min_experience_years`, `location_city_names`), and `Format Telegram` (`min_match_percent`, see below).
+**Settings tab** (Key/Value, input — user editable, read live every run): a Google-Sheet-native override for the location/experience/match-threshold env vars, so they can be changed without a container restart. **Row 1 must be literally `Key` and `Value`** (exact spelling/case) — if your first data pair ends up in row 1 instead, n8n reads it as the header row and every setting silently falls back to its env var/default (see `TROUBLESHOOTING.md`; `Store Settings` logs a warning when this happens). Precedence for each: **Settings tab value (if non-blank) > matching env var > hardcoded default.** Read by `Read Settings` → `Store Settings` (populates `staticData.settings`), consumed in `Build Search URLs` (`location_geo_id`, `location_f_pp`, `search_titles`, `exclude_title_words`) and `Process & Filter Job` (`max_experience_years`, `min_experience_years`, `location_city_names`), and `Format Telegram` (`min_match_percent`, see below).
 
 | Key | Maps to env var | Default if both blank |
 |-----|------------------|------------------------|
@@ -139,10 +146,12 @@ Regex: `/-(\d{8,})(?:\?|$)/` — extracts the numeric job ID from LinkedIn URLs 
 | `location_city_names` | `LOCATION_CITY_NAMES` | `bengaluru,bangalore,karnataka` |
 | `max_experience_years` | `MAX_EXPERIENCE_YEARS` | `4` |
 | `min_experience_years` | `MIN_EXPERIENCE_YEARS` | `0` |
+| `min_match_percent` | `MIN_MATCH_PERCENT` | `0` (no suppression) |
 | `notify_email` | *(none — Settings tab only)* | blank → Company Search email digest skipped |
+| `search_titles` | *(none — Settings tab only)* | software-engineering titles (see "Title filters") |
+| `exclude_title_words` | *(none — Settings tab only)* | staff/manager/QA/devops-type words (see "Title filters") |
 
 `min_experience_years`/`max_experience_years` together describe the experience bracket you're targeting (e.g. "3 to 5 years"). A role matches if its own stated range overlaps this bracket at all, touching boundaries counted as a match — a "2-4 years" posting matches a `3-5` target, and so does an open-ended "5+ years" posting (no ceiling to compare against, so it always satisfies the upper bound). Deliberately permissive: implemented in `Process & Filter Job` as `jobMin <= MAX_EXPERIENCE_YEARS && jobMax >= MIN_EXPERIENCE_YEARS` (jobMax = `Infinity` for open-ended roles), biased toward false positives over dropping borderline roles. Defaults (`min=0`, `max=4`) reproduce the original single-ceiling behavior exactly. Unparseable job experience always passes through regardless of the range (see "Honest filtering" below).
-| `min_match_percent` | `MIN_MATCH_PERCENT` | `0` (no suppression) |
 
 `min_match_percent` hides jobs scoring below the threshold from the Telegram message only — it does **not** affect whether they're written to the Results sheet or marked `Notified`; suppressed jobs are still marked notified (via the full, unfiltered job list in `Format Telegram`'s `jobIds`) so they're never re-scored on a later run. Only applies when Gemini scoring succeeded — the plain-fallback format (LLM failed) never suppresses, since there's no score to filter on. **Also implemented in `n8n_company_search_v1.json`** (both its Telegram message and Gmail digest — Gmail additionally notes how many roles were hidden, since it has more room than Telegram's char limit) — the two workflows' Settings-tab handling stays in sync by design (the logic is deliberately duplicated in both workflows, not shared).
 
@@ -154,21 +163,21 @@ Sheet Document ID: `YOUR_GOOGLE_SHEET_DOCUMENT_ID` (find yours in the Google She
 
 ## Telegram Notification Format
 
-**Send Telegram node**: Parse Mode should not be configured. The "can't parse entities" 400 error occurs when parse_mode is active and the message contains unescaped Markdown chars. Two mitigations applied in the code: (1) `safe()` helper strips `_` and `*` from dynamic text fields, (2) tags use `(SDE-II)` format instead of `(SDE-II)` — square brackets trigger Markdown link-entity parsing.
+**Send Telegram node** (main workflow) uses `parse_mode: HTML`; `Format Telegram`'s `safe()` HTML-escapes `&`, `<`, `>` in every dynamic field **including the tag**, which is user-typed text now (e.g. `FP&A analyst`) — an unescaped `&` makes Telegram reject the whole message ("can't parse entities"). Company Search's `Send Results Telegram` uses no parse mode and its `safe()` strips `_`/`*`. Tags use `(…)`, not `[…]`.
 
 **When jobs are found (LLM enriched — sorted by match %):**
 ```
 🔔 3 New Openings Found
 
-1. 🟢 82% — Amazon — SDE II (3-5 yrs) (SDE-II)
+1. 🟢 82% — Amazon — SDE II (3-5 yrs) (SDE II)
    📍 Bengaluru, India
    🔗 https://linkedin.com/jobs/view/123
 
-2. 🟡 65% — Myntra — Software Engineer (3+ yrs) (Backend)
+2. 🟡 65% — Myntra — Software Engineer (3+ yrs) (software engineer)
    📍 Bengaluru, India
    🔗 https://linkedin.com/jobs/view/456
 
-3. 🔴 38% — Cred — Cloud Engineer (5+ yrs) (Generic)
+3. 🔴 38% — Cred — Backend Engineer, Payments (5+ yrs) (backend engineer)
    📍 Bengaluru, India
    🔗 https://linkedin.com/jobs/view/789
 ```
@@ -178,7 +187,7 @@ Color coding: 🟢 ≥70%, 🟡 50-69%, 🔴 <50%
 ```
 🔔 3 New Openings Found
 
-1. Amazon — SDE II (3-5 yrs) (SDE-II)
+1. Amazon — SDE II (3-5 yrs) (SDE II)
    📍 Bengaluru, India
    https://linkedin.com/jobs/view/123
 
@@ -202,15 +211,15 @@ Messages exceeding Telegram's 4096 char limit are automatically split into multi
 | 4 | Webhook Trigger | webhook | Local dev trigger: `/webhook/job-search?hours=N` |
 | 5 | Parse Hours | code | Parses hours from Telegram `/jobs N` command. **First ignores (returns no items) any message whose chat id != `$env.TELEGRAM_CHAT_ID`** (owner-only lock; off when the env var is empty) |
 | 6 | Parse Webhook Hours | code | Parses hours from webhook query param |
-| 7 | Read Config | googleSheets | Reads Config tab (companies + buckets) |
+| 7 | Read Config | googleSheets | Reads Config tab (companies + optional per-company title filters) |
 | 8 | Store Config | code | Saves config to workflow static data, initializes processedJobs |
 | 9 | Read Results | googleSheets | Reads Results tab for dedup |
-| 10 | Build Search URLs | code | Builds LinkedIn search URLs per bucket |
+| 10 | Build Search URLs | code | Groups companies by title filters, batches of ≤25, one LinkedIn search URL per batch |
 | 11 | Loop Over URLs | splitInBatches | Iterates over search URLs |
 | 12 | Wait Between Searches | wait | Rate limit between search page fetches |
 | 13 | Fetch Search Page | httpRequest | HTTP GET LinkedIn search page |
 | 14 | Extract Links & Titles | html | Parses job links, titles, companies from HTML |
-| 15 | Filter & Accumulate Links | code | Negative title filter + dedup + job ID extraction |
+| 15 | Filter & Accumulate Links | code | Exclude-word title filter + dedup + job ID extraction + paging decision |
 | 16 | Output New Job Links | code | Outputs accumulated new job links |
 | 17 | Loop Over Jobs | splitInBatches | Iterates over individual jobs |
 | 18 | Wait Between Jobs | wait | Rate limit between job detail fetches |
@@ -254,24 +263,25 @@ Facts that must stay consistent with the guide (decided/verified 2026-09-20 — 
 - The Google OAuth consent screen must be **published** (In production): a Testing-mode app's sign-in expires after 7 days and the Sheets credential silently dies. Verification is not needed for personal use.
 - Local runs can't do anything Telegram-webhook-driven: no `/jobs N`, no Company Search. Scheduled runs work only while the machine is on.
 - Schedule: 8 cron rules in the `Schedule Trigger` node, timezone `Asia/Kolkata` from `GENERIC_TIMEZONE`/`TZ` in the compose file. (The old "7 AM / 7 PM" wording was stale.)
-- New companies go in **Bucket 4**. A company's LinkedIn ID comes from LinkedIn Jobs' Company filter (`f_C=` in the URL).
+- New companies need only Company, CompanyID, Active; leave `SearchTitles`/`ExtraExcludeWords` blank. A company's LinkedIn ID comes from LinkedIn Jobs' Company filter (`f_C=` in the URL). **A user after a non-software role must change `search_titles` and `exclude_title_words` in the Settings tab** (SETUP_GUIDE §1.6 and §5.2) — ask about the target role during setup.
 - **Both bots are owner-only.** A bot's `@username` is public, so `Parse Hours` and `Parse Search Command` return nothing (silently) for any chat other than `TELEGRAM_CHAT_ID`. Reply routing differs by design: the job bot's digest/no-results messages always go to `$env.TELEGRAM_CHAT_ID` (scheduled runs have no incoming message to answer), while Company Search replies to the chat that sent the command (now always the owner, thanks to the lock). Tell users that a wrong `TELEGRAM_CHAT_ID` looks like a bot that never answers; the execution log prints the id to use.
 - README and SETUP_GUIDE show the user's real screenshots from `docs/images/` (`job_bot.jpeg`, `search_bot.jpeg`, `email.jpeg`). Two Telegram messages, not one format: the job-bot digest line is `N. icon pct% — Company — Title (exp) (Tag)`; the Company Search line omits the company (it is in the header). `/jobs N` is **hours** (default 12), `/search Company N` is **days** (default 7, 1-90); both need digits only.
 
 ### Customization (quick map)
-- **Companies / buckets:** Config tab (§5.1). **Title filters:** Code nodes (§5.2, and the agent section below).
+- **Companies:** Config tab (§5.1). **Roles / title filters:** Settings tab `search_titles` / `exclude_title_words`, per-company Config columns (§5.2, and the agent section below).
 - **Location, experience, match threshold:** Settings tab, env var as fallback (§5.3, §5.4, §5.6).
 - **Schedule:** cron rules in the "Schedule Trigger" node (§5.5).
 - **Cloud deployment:** enable "Telegram Trigger", optionally disable "Webhook Trigger".
 
-### Title/Seniority Filters — agent instructions
+### Title filters — agent instructions
 
-If a user asks you to change what job titles get filtered (e.g. "also exclude 'staff engineer'", "stop excluding 'senior' for bucket 3"), this is **not** an env var — it's inline JS regex in a Code node, deliberately left unparameterized. Exact locations:
+If a user asks to change which roles/titles are searched or dropped, **it's a Sheet edit, not a code edit**:
 
-- **Negative title filter** (excludes matching titles from all buckets): node `Filter & Accumulate Links` in `n8n_job_search_v1.json`, node `Filter Links` in `n8n_company_search_v1.json`. Look for the `negativeBase` regex (applies to all 4 buckets) and `negativeSenior` regex (buckets 1 & 2 only, excludes `senior`/`sr`).
-- **Bucket keyword templates** (what search terms define "SDE II" vs "Level 3" vs generic): node `Build Search URLs` in the main workflow, `Build Search URL` in company search.
+- Their whole search: Settings tab `search_titles` / `exclude_title_words` (comma-separated plain phrases — no quotes, no OR/AND, no wildcards). For a non-software role, suggest **replacing** the exclude list, not appending: defaults like `manager`/`lead`/`security` drop legitimate titles in other fields.
+- One company whose titles differ ("Amazon calls it SDE II"): that company's Config row, `SearchTitles` (replaces) and/or `ExtraExcludeWords` (adds). Tell them identical text shares a search; each different combination is one more LinkedIn search.
+- Diagnose from the execution view: `Build Search URLs` output (one item per search: `searchLabel`, `targetTitles`, `excludeWords`), `Filter & Accumulate Links` output (`total`/`filtered`/`new` per page). Code-node `console.log` is **not** visible on a deployed instance (no `CODE_ENABLE_STDOUT`).
 
-**When editing either:** you must edit the same regex/keyword string in **both** `n8n_job_search_v1.json` and `n8n_company_search_v1.json` — this logic is intentionally duplicated between the two workflows (a deliberate choice — simpler than a shared sub-workflow), not shared. Editing only one file will make the two workflows silently disagree on what counts as a match. After editing, validate both files with `node -e "JSON.parse(require('fs').readFileSync('<file>'))"` before considering the change done.
+Only change code for the machinery: the built-in defaults (`DEFAULT_SEARCH_TITLES`, `DEFAULT_EXCLUDE_WORDS`, `BATCH_SIZE` in `Build Search URLs` / `Build Search URL`) and the matcher (`phrasePattern` in `Filter & Accumulate Links` / `Filter Links`, and the tag block in `Process & Filter Job` / `Process Job`). **Edit both workflows identically** (duplicated on purpose) and keep the defaults identical to `examples/google-sheet/settings_template.csv`. Then run the structural check below, and the offline suite if you have it (`local-harness/2026-09-title-filters/offline_tests.js`, untracked).
 
 ### Editing workflow JSON — agent checklist
 
@@ -291,7 +301,7 @@ node -e "for (const f of ['n8n_job_search_v1.json','n8n_company_search_v1.json',
 ```
 
 ## Design Principles
-- Config-driven: Companies and buckets read from Google Sheet, not hardcoded
+- Config-driven: companies, roles (title filters), location and experience read from the Google Sheet, not hardcoded
 - Location-filtered: Hardcoded to Bengaluru via LinkedIn's f_PP parameter
 - LLM-enhanced: Gemini Flash scores each job against resume; enriched Telegram with match % and color coding; Score persisted to sheet. Graceful fallback to plain format on API failure.
 - Dedup: By JobID against Results sheet before fetching job details
@@ -457,7 +467,7 @@ A separate, stateless workflow (`n8n_company_search_v1.json`) for searching a sp
 | Scope | Only companies with `Active=TRUE` | Any company in Config, partial match — `Active` is **not** checked (an on-demand, deliberate lookup isn't gated by the flag that controls passive/scheduled inclusion) |
 | Time unit | Hours | Days (default 7) |
 | Dedup | Against Results sheet | Within-run only (no sheet dedup) |
-| Negative title filters | Same | Same (staff, QA, devops, etc.; senior for buckets 1 & 2) |
+| Title filters | Settings `search_titles`/`exclude_title_words` + Config per-company columns | Same (same Settings keys and columns, same matcher) |
 | Experience filter | Same (Settings tab / env var, range-overlap match) | Same |
 | Location/match-threshold Settings | Same (Settings tab / env var) | Same |
 | Email recipient | n/a (sends no email) | Settings tab `notify_email` (Settings-only; blank → email skipped) |
@@ -501,12 +511,12 @@ Telegram Trigger (/search)
 | 6 | Lookup Company | code | Case-insensitive partial match against **all** companies in Config — `Active` is not checked (see Key Differences above). Reads the Config rows from **`$('Read Config')`, not `$input`** — its input is `Store Settings`' single status item, so reading `$input` made every lookup "not found" (bug from PR #25, fixed in #32) |
 | 7 | Company Found? | if | Routes found/not-found |
 | 8 | Send Error Telegram | telegram | "Company not found" or "Invalid command" error |
-| 9 | Build Search URL | code | Builds LinkedIn URL using company's bucket keywords |
-| 10 | Loop Over URLs | splitInBatches | Handles multi-bucket partial matches |
+| 9 | Build Search URL | code | Groups matched companies by title filters, batches of ≤25, one URL per batch |
+| 10 | Loop Over URLs | splitInBatches | One iteration per search (partial matches can span several) |
 | 11 | Wait Between Searches | wait | 3s rate limit |
 | 12 | Fetch Search Page | httpRequest | LinkedIn search page, 30s timeout |
 | 13 | Extract Links & Titles | html | Same CSS selectors as main workflow |
-| 14 | Filter Links | code | Negative title filter + job ID extraction, no dedup |
+| 14 | Filter Links | code | Exclude-word title filter + job ID extraction + paging decision, no dedup |
 | 15 | Output Job Links | code | Fans out accumulated links or signals empty |
 | 16 | Has Links? | if | Routes to job processing or no-results message |
 | 17 | Send No Results Telegram | telegram | "No openings found in Bengaluru" |
@@ -534,15 +544,15 @@ Telegram Trigger (/search)
 ```
 🔍 Jobs at Oracle (last 30 days) — 5 openings
 
-1. 🟢 82% — Software Engineer III (3-5 yrs) (SE-III)
+1. 🟢 82% — Software Engineer III (3-5 yrs) (software engineer III)
    📍 Bengaluru, India
    🔗 https://linkedin.com/jobs/view/123
 
-2. 🟡 65% — Backend Engineer (3+ yrs) (Backend)
+2. 🟡 65% — Backend Engineer (3+ yrs) (backend engineer)
    📍 Bengaluru, India
    🔗 https://linkedin.com/jobs/view/456
 
-3. 🔴 38% — Cloud Engineer (5+ yrs) (Generic)
+3. 🔴 38% — Business Intelligence Engineer (5+ yrs) (Other)
    📍 Bengaluru, India
    🔗 https://linkedin.com/jobs/view/789
 ```
@@ -554,7 +564,7 @@ Color coding: 🟢 ≥70%, 🟡 50-69%, 🔴 <50%
 
 Found 5 openings in Bengaluru:
 
-1. Oracle — Software Engineer III (3-5 yrs) (SE-III)
+1. Oracle — Software Engineer III (3-5 yrs) (software engineer III)
    📍 Bengaluru, India
    https://linkedin.com/jobs/view/123
 

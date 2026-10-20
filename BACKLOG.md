@@ -37,8 +37,8 @@
 
 ### Workflow improvements
 
-5. **Show the result cap in Telegram, not only the log.** A search stops at 30 pages (300 results) per bucket and logs a `WARNING`; the user never sees it. Consider a note in the message and `MAX_PAGES` as a Settings-tab key.
-6. **Watch Bucket 4 (68 companies).** Its 24h volume was 26 postings on the day it was measured, far under the cap, but every company added there grows it. If it ever nears 300, split a bucket into chunks of ~15 companies per request.
+5. **Show the result cap in Telegram, not only the log.** A search stops at 30 pages (300 results) and logs a `WARNING` that only shows in container logs (and as `page: 30` in the node output); the user never sees it. Consider a note in the message and `MAX_PAGES` as a Settings-tab key.
+6. **"member of technical staff" is searched, but "staff" is excluded.** The default `search_titles` include MTS / member of technical staff, and the default `exclude_title_words` include `staff` (meant for "Staff Engineer"), so a title like "Member Technical Staff II" is found and then dropped (seen live: Nielsen, 2026-09-27). Present before the Sheet-driven filters too. Options: replace `staff` with `staff engineer, staff software engineer`, or accept it. Needs a decision, not a code fix.
 7. **Sheets write-quota burst (unverified).** Reasoned unlikely (n8n's Sheets node batches its writes), never tested with a large first run.
 8. **Auto resume customization** — the old "V2" idea: tailor the resume to a matched posting.
 
@@ -64,6 +64,6 @@
 ## Known limits (not bugs)
 
 - Reads only LinkedIn's public job pages — no login, so no personalised results, and roles LinkedIn doesn't show to guests are invisible.
-- One search request per bucket of companies, at most 300 results per bucket per run.
+- One LinkedIn search per group of up to 25 companies with identical title filters; at most 300 results per search per run.
 - Location filtering is text matching on the job's location string (see `location_city_names`); experience is regex-parsed from the description and passes through as "Not specified" when it can't be read.
 - The Gemini free tier may use submitted content to improve Google's products (documented in the README's Privacy section).

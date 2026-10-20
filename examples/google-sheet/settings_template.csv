@@ -6,3 +6,5 @@ max_experience_years,4
 min_experience_years,0
 min_match_percent,0
 notify_email,
+search_titles,"software engineer, software developer, backend engineer, SDE, MTS, member of technical staff"
+exclude_title_words,"staff, principal, lead, manager, director, ios, android, machine learning, data science, data scientist, QA, SDET, devops, SRE, site reliability, frontend, front end, intern, internship, test engineer, test automation, platform engineer, infra engineer, cloud engineer, security, mobile, embedded"
